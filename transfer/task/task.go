@@ -1,0 +1,257 @@
+package task
+
+import (
+	trans "./.."
+	"cydex"
+	"cydex/transfer"
+	"errors"
+	"fmt"
+	"github.com/pborman/uuid"
+	"log"
+	"os"
+	"strings"
+	"sync"
+	"time"
+)
+
+var (
+	TaskMgr *TaskManager
+	Logger  *log.Logger
+)
+
+func init() {
+	Logger = log.New(os.Stderr, "task", log.LstdFlags|log.Lshortfile)
+	TaskMgr = NewTaskManager()
+}
+
+func SetLogger(l *log.Logger) {
+	if l != nil {
+		Logger = l
+	}
+}
+
+func GenerateTaskId() string {
+	return uuid.New()
+}
+
+type TaskObserver interface {
+	AddTask(t *Task)
+	DelTask(t *Task)
+	TaskStateNotify(t *Task, state *transfer.TaskState)
+}
+
+type UploadReq struct {
+	*transfer.UploadTaskReq
+	Pid string
+}
+
+type DownloadReq struct {
+	*transfer.DownloadTaskReq
+	Pid string
+}
+
+type Task struct {
+	TaskId      string             // 任务ID
+	Type        int                // 类型, U or D
+	State       transfer.TaskState // 任务状态
+	Node        *trans.Node        // 该任务分配的传输节点
+	UploadReq   *UploadReq
+	DownloadReq *DownloadReq
+}
+
+func (self *Task) IsDispatched() bool {
+	return self.Node != nil
+}
+
+func (self *Task) String() string {
+	var s string
+	switch self.Type {
+	case cydex.UPLOAD:
+		s = "u"
+	case cydex.DOWNLOAD:
+		s = "d"
+	default:
+		s = "?"
+	}
+	return fmt.Sprintf("<Task(%s %s)>", self.TaskId, s)
+}
+
+// 任务管理器
+type TaskManager struct {
+	scheduler              TaskScheduler
+	lock                   sync.Mutex
+	tasks                  map[string]*Task // task_id -> node
+	observer_idx           uint32
+	observers              map[uint32]TaskObserver
+	task_state_routine_run bool
+	task_state_chan        chan *transfer.TaskState
+}
+
+func NewTaskManager() *TaskManager {
+	t := new(TaskManager)
+	t.tasks = make(map[string]*Task)
+	t.observers = make(map[uint32]TaskObserver)
+	t.task_state_chan = make(chan *transfer.TaskState, 10)
+	return t
+}
+
+func (self *TaskManager) SetScheduler(s TaskScheduler) {
+	Logger.Printf("Set scheduler as %s\n", s.String())
+	self.scheduler = s
+}
+
+func (self *TaskManager) AddObserver(o TaskObserver) (uint32, error) {
+	if o == nil {
+		return 0, errors.New("Observer is invalid")
+	}
+	defer func() {
+		self.observer_idx++
+		self.lock.Unlock()
+	}()
+	self.lock.Lock()
+	self.observers[self.observer_idx] = o
+	return self.observer_idx, nil
+}
+
+func (self *TaskManager) DelObserver(id uint32) {
+	defer self.lock.Unlock()
+	self.lock.Lock()
+	delete(self.observers, id)
+}
+
+func (self *TaskManager) AddTask(t *Task) {
+	defer func() {
+		self.lock.Unlock()
+		Logger.Printf("Add task %s\n", t)
+	}()
+	self.lock.Lock()
+	self.tasks[t.TaskId] = t
+	for _, o := range self.observers {
+		o.AddTask(t)
+	}
+}
+
+func (self *TaskManager) GetTask(taskid string) (t *Task) {
+	defer self.lock.Unlock()
+	self.lock.Lock()
+	t, _ = self.tasks[taskid]
+	return
+}
+
+func (self *TaskManager) DelTask(taskid string) {
+	defer self.lock.Unlock()
+	self.lock.Lock()
+	t, _ := self.tasks[taskid]
+	delete(self.tasks, taskid)
+	if t != nil {
+		for _, o := range self.observers {
+			o.DelTask(t)
+		}
+	}
+	Logger.Printf("Del task(%s) %+v\n", taskid, t)
+}
+
+func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (rsp *transfer.UploadTaskRsp, err error) {
+	if req == nil || req.TaskId == "" {
+		return nil, errors.New("Invalid req")
+	}
+	if self.scheduler == nil {
+		return nil, errors.New("No Scheduler, please set first")
+	}
+	var node *trans.Node
+
+	if node, err = self.scheduler.DispatchUpload(req); err != nil {
+		return nil, err
+	}
+	if node == nil {
+		// Log
+		return
+	}
+
+	var rsp_msg *transfer.Message
+	msg := transfer.NewReqMessage("", "uploadtask", "", 0)
+	msg.Req.UploadTask = req.UploadTaskReq
+	if rsp_msg, err = node.SendRequestSync(msg, timeout); err != nil {
+		// log
+		return
+	}
+	// TODO 判断rsp_msg的Code值
+	rsp = rsp_msg.Rsp.UploadTask
+
+	t := &Task{
+		TaskId:    req.TaskId,
+		Type:      cydex.UPLOAD,
+		Node:      node,
+		UploadReq: req,
+	}
+	TaskMgr.AddTask(t)
+	return
+}
+
+func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duration) (rsp *transfer.DownloadTaskRsp, err error) {
+	if req == nil || req.TaskId == "" {
+		return nil, errors.New("Invalid req")
+	}
+	if self.scheduler == nil {
+		return nil, errors.New("No Scheduler, please set first")
+	}
+	var node *trans.Node
+
+	if node, err = self.scheduler.DispatchDownload(req); err != nil {
+		return nil, err
+	}
+	if node == nil {
+		// Log
+		return
+	}
+
+	var rsp_msg *transfer.Message
+	msg := transfer.NewReqMessage("", "downloadtask", "", 0)
+	msg.Req.DownloadTask = req.DownloadTaskReq
+	if rsp_msg, err = node.SendRequestSync(msg, timeout); err != nil {
+		// log
+		return
+	}
+	rsp = rsp_msg.Rsp.DownloadTask
+
+	t := &Task{
+		TaskId:      req.TaskId,
+		Type:        cydex.DOWNLOAD,
+		Node:        node,
+		DownloadReq: req,
+	}
+	TaskMgr.AddTask(t)
+	return
+}
+
+func (self *TaskManager) OnTaskStateNotify(nid string, state *transfer.TaskState) (err error) {
+	if !self.task_state_routine_run {
+		self.task_state_routine_run = true
+		go self.taskStateThread()
+	}
+	self.task_state_chan <- state
+	return
+}
+
+func (self *TaskManager) handleTaskState(state *transfer.TaskState) (err error) {
+	Logger.Printf("TaskState: %+v\n", state)
+	t := self.GetTask(state.TaskId)
+
+	self.lock.Lock()
+	for _, o := range self.observers {
+		o.TaskStateNotify(t, state)
+	}
+	self.lock.Unlock()
+
+	s := strings.ToLower(state.State)
+	if s == "end" {
+		self.DelTask(state.TaskId)
+	}
+	return
+}
+
+func (self *TaskManager) taskStateThread() {
+	for state := range self.task_state_chan {
+		self.handleTaskState(state)
+	}
+}
