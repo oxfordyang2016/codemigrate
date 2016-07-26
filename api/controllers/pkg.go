@@ -15,31 +15,38 @@ type PkgsController struct {
 }
 
 func (self *PkgsController) Get() {
-	// uid := self.Ctx.Input.Param(":uid")
+	uid := self.GetString(":uid")
+	query := self.GetString("query")
+	filter := self.GetString("filter")
+
+	switch query {
+	case "all":
+		if filter == "change" {
+			self.getActive()
+		}
+	case "sender":
+		self.getUploads()
+	case "receiver":
+		self.getDownloads()
+	default:
+		self.getAll()
+	}
 }
 
-// 创建包裹
-// FIXME 需要事务处理?
+//
+func (self *PkgsController) getActive() {
+
+}
+
 func (self *PkgsController) Post() {
 	rsp := new(cydex.CreatePkgRsp)
 	req := new(cydex.CreatePkgReq)
-	pkg_o := new(cydex.Pkg)
 
 	defer func() {
 		self.Data["json"] = rsp
 		self.ServeJSON()
 	}()
 
-	var (
-		err           error
-		uid, fid, pid string
-		// pkg_m         *pkg_model.Pkg
-		// file_m        *pkg_model.File
-		// seg_m         *pkg_model.Seg
-		file_o *cydex.File
-	)
-
-	uid = self.Ctx.Input.Param(":uid")
 	// 获取拆包器
 	unpacker := pkg.GetUnpacker()
 	if unpacker == nil {
@@ -47,24 +54,57 @@ func (self *PkgsController) Post() {
 		return
 	}
 	// 获取请求
-	if err = json.Unmarshal(self.Ctx.Input.RequestBody, req); err != nil {
+	if err := json.Unmarshal(self.Ctx.Input.RequestBody, req); err != nil {
 		rsp.Error = cydex.ErrInvalidParam
 		return
 	}
+
+	self.createPkg(req, rsp)
+}
+
+// 创建包裹
+func (self *PkgsController) createPkg(req *cydex.CreatePkgReq, rsp *cydex.CreatePkgRsp) {
 	if !req.Verify() {
 		rsp.Error = cydex.ErrInvalidParam
 		return
 	}
 
+	var (
+		err           error
+		uid, fid, pid string
+		file_o        *cydex.File
+	)
+	session := pkg_model.DB().NewSession()
+	session.Begin()
+
+	defer func() {
+		if err != nil {
+			session.Rollback()
+		}
+		session.Close()
+	}()
+
+	pkg_o := new(cydex.Pkg)
 	pid = unpacker.GeneratePid(uid, req.Title, req.Notes)
 	size := uint64(0)
 	for _, f := range req.Files {
 		size += f.Size
 	}
-	if _, err := pkg_model.CreatePkg(pid, req.Title, req.Notes, uint64(len(req.Files)), size, req.EncryptionType); err != nil {
+
+	// 创建pkg数据库记录
+	pkg_m := &pkg_model.Pkg{
+		Pid:            pid,
+		Title:          req.Title,
+		Notes:          req.Notes,
+		NumFiles:       uint64(len(req.Files)),
+		Size:           size,
+		EncryptionType: req.EncryptionType,
+	}
+	if _, err = session.Insert(pkg_m); err != nil {
 		rsp.Error = cydex.ErrInnerServer
 		return
 	}
+
 	pkg_o.Pid = pid
 	pkg_o.Title = req.Title
 	pkg_o.Notes = req.Notes
@@ -84,25 +124,39 @@ func (self *PkgsController) Post() {
 			rsp.Error = cydex.ErrInnerServer
 			return
 		}
-		if _, err = pkg_model.CreateFile(fid, f.Filename, f.Path, f.Size, len(file_o.Segs)); err != nil {
+		file_m := &pkg_model.File{
+			Fid:      fid,
+			Pid:      pid,
+			Filename: f.Filename,
+			Path:     f.Path,
+			Size:     f.Size,
+			NumSegs:  len(file_o.Segs),
+		}
+		if _, err = session.Insert(file_m); err != nil {
 			rsp.Error = cydex.ErrInnerServer
 			return
 		}
 		for _, s := range file_o.Segs {
-			if _, err = pkg_model.CreateSeg(s.Sid, fid, s.InnerSize); err != nil {
+			seg_m := &pkg_model.Seg{
+				Sid:  s.Sid,
+				Fid:  fid,
+				Size: s.InnerSize,
+			}
+			if _, err = session.Insert(seg_m); err != nil {
 				rsp.Error = cydex.ErrInnerServer
 				return
 			}
 		}
 		pkg_o.Files = append(pkg_o.Files, file_o)
 	}
+	session.Commit()
 	rsp.Pkg = pkg_o
 
 	// Dispatch jobs
-	pkg.JobMgr.NewJob(uid, pid, cydex.UPLOAD)
+	pkg.JobMgr.CreateJob(uid, pid, cydex.UPLOAD)
 	if req.Receivers != nil {
 		for _, r := range req.Receivers {
-			pkg.JobMgr.NewJob(r.Uid, pid, cydex.DOWNLOAD)
+			pkg.JobMgr.CreateJob(r.Uid, pid, cydex.DOWNLOAD)
 		}
 	}
 }

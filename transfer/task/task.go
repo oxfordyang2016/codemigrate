@@ -64,8 +64,6 @@ type DownloadReq struct {
 	*transfer.DownloadTaskReq
 	Pid             string
 	FinishedSidList []string //已经下完的片段
-	CreateAt        time.Time
-	UpdateAt        time.Time
 }
 
 func NewDownloadReq(r *transfer.DownloadTaskReq, pid string, finished_sid_list []string) (req *DownloadReq, err error) {

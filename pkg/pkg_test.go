@@ -23,7 +23,7 @@ func Test_DefaultUnpacker(t *testing.T) {
 			fid, err = U.GenerateFid(pid, 10, nil)
 			So(err, ShouldBeNil)
 			So(fid, ShouldEqual, "1234567890ab1234567810")
-			for i := uint(0); i < 99; i++ {
+			for i := 0; i < 99; i++ {
 				fid, err = U.GenerateFid(pid, i, nil)
 				So(err, ShouldBeNil)
 			}

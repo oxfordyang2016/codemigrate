@@ -16,7 +16,7 @@ import (
 
 const (
 	// JD数据同步进数据库的间隔
-	JOBDETAIL_SYNC_INTERVAL = 30 * time.Second
+	DEFAULT_CACHE_SYNC_TIMEOUT = 30 * time.Second
 )
 
 var (
@@ -75,21 +75,39 @@ func getFidFromTask(t *task.Task) string {
 }
 
 type JobManager struct {
-	lock sync.Mutex
-	jobs map[string]*models.Job // string is hashid
+	lock               sync.Mutex
+	jobs               map[string]*models.Job // string is hashid
+	cache_sync_timeout time.Duration          //cache同步超时时间
 }
 
 func NewJobManager() *JobManager {
 	jm := new(JobManager)
 	jm.jobs = make(map[string]*models.Job)
+	jm.cache_sync_timeout = DEFAULT_CACHE_SYNC_TIMEOUT
 	return jm
 }
 
 // 创建一个新任务, 因为是活动任务,会加入cache
-func (self *JobManager) NewJob(uid, pid string, typ int) (j *models.Job, err error) {
+func (self *JobManager) CreateJob(uid, pid string, typ int) (j *models.Job, err error) {
+	session := models.DB().NewSession()
+	session.Begin()
+
+	defer func() {
+		if err != nil {
+			session.Rollback()
+		}
+		session.Close()
+	}()
+
 	hashid := GenerateHashId(uid, pid, typ)
 	jobid := hashid
-	if j, err = models.CreateJob(jobid, uid, pid, typ); err != nil {
+	j = &models.Job{
+		JobId: jobid,
+		Uid:   uid,
+		Pid:   pid,
+		Type:  typ,
+	}
+	if _, err = session.Insert(j); err != nil {
 		return nil, err
 	}
 	j.Details = make(map[string]*models.JobDetail)
@@ -100,17 +118,22 @@ func (self *JobManager) NewJob(uid, pid string, typ int) (j *models.Job, err err
 	}
 	j.Pkg = pkg
 	for _, f := range pkg.Files {
-		jd, err := models.CreateJobDetail(jobid, f.Fid)
-		if err != nil {
+		jd := &models.JobDetail{
+			JobId: jobid,
+			Fid:   f.Fid,
+		}
+		if _, err := session.Insert(jd); err != nil {
 			return nil, err
 		}
 		jd.SegsRecvdSize = make(map[string]uint64)
 		j.Details[jd.Fid] = jd
 	}
+	session.Commit()
 
-	defer self.lock.Unlock()
 	self.lock.Lock()
 	self.jobs[hashid] = j
+	self.lock.Unlock()
+
 	return j, nil
 }
 
@@ -137,6 +160,10 @@ func (self *JobManager) getJob(hashid string) *models.Job {
 func (self *JobManager) getJobDetail(j *models.Job, fid string) *models.JobDetail {
 	self.lock.Lock()
 	defer self.lock.Unlock()
+
+	if j.Details == nil {
+		j.Details = make(map[string]*models.JobDetail)
+	}
 	jd, ok := j.Details[fid]
 	if ok {
 		return jd
@@ -181,7 +208,7 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 	if j == nil {
 		return
 	}
-	jd := j.GetDetail(getFidFromTask(t))
+	jd := self.getJobDetail(j, getFidFromTask(t))
 	if jd == nil {
 		return
 	}
@@ -211,12 +238,23 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 
 	if j.NumFinishedDetails == int(j.Pkg.NumFiles) {
 		j.Finish()
-		defer self.lock.Unlock()
 		self.lock.Lock()
 		delete(self.jobs, j.JobId) // 从表里删除
+		self.lock.Unlock()
 	}
 
-	if update && time.Since(jd.UpdateAt) >= JOBDETAIL_SYNC_INTERVAL {
+	if update && time.Since(jd.UpdateAt) >= self.cache_sync_timeout {
 		jd.Save()
 	}
+}
+
+func (self *JobManager) SetCacheSyncTimeout(d time.Duration) {
+	self.cache_sync_timeout = d
+}
+
+func (self *JobManager) HasCachedJob(jobid string) bool {
+	defer self.lock.Unlock()
+	self.lock.Lock()
+	_, ok := self.jobs[jobid]
+	return ok
 }

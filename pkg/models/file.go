@@ -5,30 +5,31 @@ import (
 )
 
 type File struct {
-	Id         uint64    `xorm:"pk autoincr"`
-	Fid        string    `xorm:"varchar(24) notnull unique"`
-	Name       string    `xorm:"varchar(30) notnull"`
-	Size       uint64    `xorm:"BigInt notnull"`
-	EigenValue string    `xorm:"varchar(80)"`
-	Path       string    `xorm:"varchar(128) notnull"`
-	PathAbs    string    `xorm:"varchar(128)"`
-	Pid        string    `xorm:"varchar(22)"`
-	Type       int       `xorm:"Int notnull default(1)"`
-	ServerPath string    `xorm:"varchar(30)"`
-	CreateAt   time.Time `xorm:"DateTime created"`
-	UpdatedAt  time.Time `xorm:"Datetime updated"`
-	NumSegs    int       `xorm:"not null"`
-	Pkg        *Pkg      `xorm:"-"`
-	Segs       []*Seg    `xorm:"-"`
+	Id         uint64 `xorm:"pk autoincr"`
+	Fid        string `xorm:"varchar(24) notnull unique"`
+	Pid        string `xorm:"varchar(22)"`
+	Name       string `xorm:"varchar(30) notnull"`
+	Path       string `xorm:"varchar(128) notnull"`
+	Type       int    `xorm:"Int notnull default(1)"`
+	Size       uint64 `xorm:"BigInt notnull"`
+	EigenValue string `xorm:"varchar(80)"`
+	PathAbs    string `xorm:"varchar(128)"`
+	NumSegs    int    `xorm:"not null"`
+	// ServerPath string    `xorm:"varchar(30)"`
+	CreateAt  time.Time `xorm:"DateTime created"`
+	UpdatedAt time.Time `xorm:"Datetime updated"`
+	Pkg       *Pkg      `xorm:"-"`
+	Segs      []*Seg    `xorm:"-"`
 }
 
 // 创建文件
-func CreateFile(fid, name, path string, size uint64, num_segs int) (*File, error) {
+func CreateFile(fid, pid, name, path string, size uint64, num_segs int) (*File, error) {
 	f := &File{
 		Fid:     fid,
 		Name:    name,
 		Path:    path,
 		Size:    size,
+		Pid:     pid,
 		NumSegs: num_segs,
 	}
 	if _, err := DB().Insert(f); err != nil {
