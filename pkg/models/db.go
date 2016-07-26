@@ -8,8 +8,7 @@ import (
 var (
 	Models []interface{} = []interface{}{
 		new(Pkg), new(File), new(Seg),
-		new(Upload), new(UploadDetail),
-		new(Download), new(DownloadDetail),
+		new(Job), new(JobDetail),
 	}
 )
 

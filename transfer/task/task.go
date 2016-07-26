@@ -14,6 +14,10 @@ import (
 	"time"
 )
 
+const (
+	TASK_TIMEOUT = 5 * time.Minute
+)
+
 var (
 	TaskMgr *TaskManager
 	Logger  *log.Logger
@@ -45,9 +49,35 @@ type UploadReq struct {
 	Pid string
 }
 
+func NewUploadReq(r *transfer.UploadTaskReq, pid string) (req *UploadReq, err error) {
+	if r == nil || pid == "" {
+		return nil, errors.New("Invalid params")
+	}
+	req = &UploadReq{
+		UploadTaskReq: r,
+		Pid:           pid,
+	}
+	return req, nil
+}
+
 type DownloadReq struct {
 	*transfer.DownloadTaskReq
-	Pid string
+	Pid             string
+	FinishedSidList []string //已经下完的片段
+	CreateAt        time.Time
+	UpdateAt        time.Time
+}
+
+func NewDownloadReq(r *transfer.DownloadTaskReq, pid string, finished_sid_list []string) (req *DownloadReq, err error) {
+	if r == nil || pid == "" {
+		return nil, errors.New("Invalid params")
+	}
+	req = &DownloadReq{
+		DownloadTaskReq: r,
+		Pid:             pid,
+		FinishedSidList: finished_sid_list,
+	}
+	return req, nil
 }
 
 type Task struct {
@@ -57,6 +87,8 @@ type Task struct {
 	Node        *trans.Node        // 该任务分配的传输节点
 	UploadReq   *UploadReq
 	DownloadReq *DownloadReq
+	CreateAt    time.Time
+	UpdateAt    time.Time
 }
 
 func (self *Task) IsDispatched() bool {
@@ -120,11 +152,20 @@ func (self *TaskManager) DelObserver(id uint32) {
 }
 
 func (self *TaskManager) AddTask(t *Task) {
+	// delete timeouted task
+	for _, t := range self.tasks {
+		if time.Since(t.UpdateAt) > TASK_TIMEOUT {
+			self.DelTask(t.TaskId)
+		}
+	}
+
 	defer func() {
 		self.lock.Unlock()
 		Logger.Printf("Add task %s\n", t)
 	}()
+
 	self.lock.Lock()
+
 	self.tasks[t.TaskId] = t
 	for _, o := range self.observers {
 		o.AddTask(t)
@@ -183,6 +224,8 @@ func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (
 		Type:      cydex.UPLOAD,
 		Node:      node,
 		UploadReq: req,
+		CreateAt:  time.Now(),
+		UpdateAt:  time.Now(),
 	}
 	TaskMgr.AddTask(t)
 	return
@@ -219,6 +262,8 @@ func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duratio
 		Type:        cydex.DOWNLOAD,
 		Node:        node,
 		DownloadReq: req,
+		CreateAt:    time.Now(),
+		UpdateAt:    time.Now(),
 	}
 	TaskMgr.AddTask(t)
 	return
@@ -236,6 +281,9 @@ func (self *TaskManager) OnTaskStateNotify(nid string, state *transfer.TaskState
 func (self *TaskManager) handleTaskState(state *transfer.TaskState) (err error) {
 	Logger.Printf("TaskState: %+v\n", state)
 	t := self.GetTask(state.TaskId)
+	if t != nil {
+		t.UpdateAt = time.Now()
+	}
 
 	self.lock.Lock()
 	for _, o := range self.observers {
@@ -243,9 +291,13 @@ func (self *TaskManager) handleTaskState(state *transfer.TaskState) (err error) 
 	}
 	self.lock.Unlock()
 
-	s := strings.ToLower(state.State)
-	if s == "end" {
-		self.DelTask(state.TaskId)
+	// task有多个seg, 只有这些seg均end了,才触发DelTask~~~
+	if state.Sid == "" {
+		// sid为空说明是针对整个task的
+		s := strings.ToLower(state.State)
+		if s == "end" {
+			self.DelTask(state.TaskId)
+		}
 	}
 	return
 }

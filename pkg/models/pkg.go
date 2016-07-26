@@ -14,10 +14,10 @@ type Pkg struct {
 	BackupId       string `xorm:"varchar(32) unique"`
 	EncryptionType int    `xorm:"Int default(0)"`
 	// ServerPath     string    `xorm:"varchar(30) null"`
-	Fmode     int       `xorm:"Int default(0)"`
-	Flag      int       `xorm:"Int not null default(1)"`
-	CreateAt  time.Time `xorm:"DateTime created"`
-	UpdatedAt time.Time `xorm:"Datetime updated"`
+	Fmode    int       `xorm:"Int default(0)"`
+	Flag     int       `xorm:"Int not null default(1)"`
+	CreateAt time.Time `xorm:"DateTime created"`
+	UpdateAt time.Time `xorm:"Datetime updated"`
 
 	Files []*File `xorm:"-"`
 }
@@ -42,8 +42,17 @@ func CreatePkg(pid, title, notes string, num_files uint64, size uint64, encrypti
 	return p, nil
 }
 
-func GetPkg(uid, pid string) (*Pkg, error) {
-	return nil, nil
+func GetPkg(pid string, with_files bool) (p *Pkg, err error) {
+	p = new(Pkg)
+	var existed bool
+	if existed, err = DB().Where("pid=?", pid).Get(p); err != nil {
+		return nil, err
+	}
+	if !existed {
+		return nil, nil
+	}
+	p.GetFiles(false)
+	return p, nil
 }
 
 func (self *Pkg) GetFiles(with_seg bool) error {

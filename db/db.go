@@ -42,3 +42,12 @@ func NewDBEngine(driver, name string, debug bool) (*DBEngine, error) {
 	}
 	return d, nil
 }
+
+func (self *DBEngine) SyncModels(models []interface{}) error {
+	for _, m := range models {
+		if err := self.Write.Sync2(m); err != nil {
+			return err
+		}
+	}
+	return nil
+}

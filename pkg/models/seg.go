@@ -5,15 +5,15 @@ import (
 )
 
 type Seg struct {
-	Id        uint64    `xorm:"pk autoincr"`
-	Sid       string    `xorm:"varchar(32) unique not null"`
-	State     int       `xorm:"Int not null default(0)"`
-	Size      uint64    `xorm:"BigInt not null"`
-	Storage   string    `xorm:"varchar(255)"`
-	Fid       string    `xorm:"varchar(24)"`
-	CreateAt  time.Time `xorm:"DateTime created"`
-	UpdatedAt time.Time `xorm:"Datetime updated"`
-	File      *File     `xorm:"-"`
+	Id       uint64    `xorm:"pk autoincr"`
+	Sid      string    `xorm:"varchar(32) unique not null"`
+	State    int       `xorm:"Int not null default(0)"`
+	Size     uint64    `xorm:"BigInt not null"`
+	Storage  string    `xorm:"varchar(255)"`
+	Fid      string    `xorm:"varchar(24)"`
+	CreateAt time.Time `xorm:"DateTime created"`
+	UpdateAt time.Time `xorm:"Datetime updated"`
+	File     *File     `xorm:"-"`
 }
 
 // 创建Seg

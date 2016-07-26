@@ -37,6 +37,18 @@ func CreateFile(fid, name, path string, size uint64, num_segs int) (*File, error
 	return f, nil
 }
 
+func GetFile(fid string) (f *File, err error) {
+	f = new(File)
+	var existed bool
+	if existed, err = DB().Where("fid=?", fid).Get(f); err != nil {
+		return nil, err
+	}
+	if !existed {
+		return nil, err
+	}
+	return f, nil
+}
+
 func GetFiles(pid string, with_seg bool) ([]*File, error) {
 	files := make([]*File, 0)
 	if err := DB().Where("pid=?", pid).Find(&files); err != nil {
