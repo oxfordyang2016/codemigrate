@@ -10,7 +10,7 @@ var (
 )
 
 func init() {
-	Logger = log.New(os.Stderr, "task", log.LstdFlags|log.Lshortfile)
+	Logger = log.New(os.Stderr, "trans", log.LstdFlags|log.Lshortfile)
 }
 
 func SetLogger(l *log.Logger) {

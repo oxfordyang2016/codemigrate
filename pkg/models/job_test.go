@@ -19,8 +19,8 @@ func Test_Job(t *testing.T) {
 	if TEST_DB != ":memory:" {
 		os.Remove(TEST_DB)
 	}
-	db.CreateDefaultDBEngine("sqlite3", TEST_DB, SHOW_SQL)
-	DBSyncTables()
+	db.CreateEngine("sqlite3", TEST_DB, SHOW_SQL)
+	SyncTables()
 
 	Convey("Test Job", t, func() {
 		Convey("Test create", func() {

@@ -92,11 +92,11 @@ func Test_Node(t *testing.T) {
 	Convey("Test Node", t, func() {
 		Convey("DB Init using sqlite3", func() {
 			Convey("create", func() {
-				err = db.CreateDefaultDBEngine("sqlite3", TEST_DB, false)
+				err = db.CreateEngine("sqlite3", TEST_DB, false)
 				So(err, ShouldBeNil)
 			})
 			Convey("Sync Tables", func() {
-				err = models.DBSyncTables()
+				err = models.SyncTables()
 				So(err, ShouldBeNil)
 			})
 		})
