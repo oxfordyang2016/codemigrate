@@ -27,7 +27,7 @@ func init() {
 	JobMgr = NewJobManager()
 }
 
-func GenerateHashId(uid, pid string, typ int) string {
+func HashJob(uid, pid string, typ int) string {
 	var s string
 	switch typ {
 	case cydex.UPLOAD:
@@ -36,6 +36,34 @@ func GenerateHashId(uid, pid string, typ int) string {
 		s = "D"
 	}
 	return fmt.Sprintf("%s:%s:%s", uid, s, pid)
+}
+
+func getMetaFromTask(t *task.Task) (uid, pid, fid string, typ int) {
+	if t == nil {
+		return
+	}
+	typ = t.Type
+	if t.UploadReq != nil {
+		pid = t.UploadReq.Pid
+		uid = t.UploadReq.Uid
+		fid = t.UploadReq.Fid
+	}
+	if t.DownloadReq != nil {
+		pid = t.DownloadReq.Pid
+		uid = t.DownloadReq.Uid
+		fid = t.DownloadReq.Fid
+	}
+	return
+}
+
+func getHashIdFromTask(t *task.Task) string {
+	uid, pid, _, typ := getMetaFromTask(t)
+	return HashJob(uid, pid, typ)
+}
+
+func getFidFromTask(t *task.Task) (fid string) {
+	_, _, fid, _ = getMetaFromTask(t)
+	return
 }
 
 func updateJobDetailFinishedSize(jd *models.JobDetail, sid string, total_size uint64) uint64 {
@@ -50,45 +78,41 @@ func updateJobDetailFinishedSize(jd *models.JobDetail, sid string, total_size ui
 	return total
 }
 
-func getHashIdFromTask(t *task.Task) string {
-	var uid, pid string
-	if t.UploadReq != nil {
-		pid = t.UploadReq.Pid
-		uid = t.UploadReq.Uid
-	}
-	if t.DownloadReq != nil {
-		pid = t.DownloadReq.Pid
-		uid = t.DownloadReq.Uid
-	}
-	return GenerateHashId(uid, pid, t.Type)
+type Track struct {
+	// int没啥用,这里当作set使用
+	Uploads   map[string]int
+	Downloads map[string]int
 }
 
-func getFidFromTask(t *task.Task) string {
-	var fid string
-	if t.UploadReq != nil {
-		fid = t.UploadReq.Fid
-	}
-	if t.DownloadReq != nil {
-		fid = t.DownloadReq.Fid
-	}
-	return fid
+func NewTrack() *Track {
+	t := new(Track)
+	t.Uploads = make(map[string]int)
+	t.Downloads = make(map[string]int)
+	return t
 }
 
 type JobManager struct {
-	lock               sync.Mutex
-	jobs               map[string]*models.Job // string is hashid
-	cache_sync_timeout time.Duration          //cache同步超时时间
+	lock sync.Mutex
+	// jobs               map[string]*models.Job // string is hashid
+	cache_sync_timeout time.Duration //cache同步超时时间
+
+	jobs map[string]*models.Job // jobid
+	// job_details map[string]*models.JobDetail // jdid
+	track_users map[string]*Track // uid->track, track里记录上传下载的pid
+	track_pkgs  map[string]*Track // pid->track, track里记录上传下载的uid
 }
 
 func NewJobManager() *JobManager {
 	jm := new(JobManager)
-	jm.jobs = make(map[string]*models.Job)
 	jm.cache_sync_timeout = DEFAULT_CACHE_SYNC_TIMEOUT
+	jm.jobs = make(map[string]*models.Job)
+	jm.track_users = make(map[string]*Track)
+	jm.track_pkgs = make(map[string]*Track)
 	return jm
 }
 
 // 创建一个新任务, 因为是活动任务,会加入cache
-func (self *JobManager) CreateJob(uid, pid string, typ int) (j *models.Job, err error) {
+func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 	session := models.DB().NewSession()
 	session.Begin()
 
@@ -99,22 +123,22 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (j *models.Job, err 
 		session.Close()
 	}()
 
-	hashid := GenerateHashId(uid, pid, typ)
+	hashid := HashJob(uid, pid, typ)
 	jobid := hashid
-	j = &models.Job{
+	j := &models.Job{
 		JobId: jobid,
 		Uid:   uid,
 		Pid:   pid,
 		Type:  typ,
 	}
 	if _, err = session.Insert(j); err != nil {
-		return nil, err
+		return err
 	}
 	j.Details = make(map[string]*models.JobDetail)
 	// create details
 	pkg, err := models.GetPkg(pid, true)
 	if err != nil || pkg == nil {
-		return nil, err
+		return err
 	}
 	j.Pkg = pkg
 	for _, f := range pkg.Files {
@@ -123,21 +147,22 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (j *models.Job, err 
 			Fid:   f.Fid,
 		}
 		if _, err := session.Insert(jd); err != nil {
-			return nil, err
+			return err
 		}
 		jd.SegsRecvdSize = make(map[string]uint64)
-		j.Details[jd.Fid] = jd
+		j.Details[f.Fid] = jd
 	}
 	session.Commit()
 
 	self.lock.Lock()
 	self.jobs[hashid] = j
+	self.AddTrack(uid, pid, typ, false)
 	self.lock.Unlock()
 
-	return j, nil
+	return nil
 }
 
-func (self *JobManager) getJob(hashid string) *models.Job {
+func (self *JobManager) GetJob(hashid string) *models.Job {
 	var err error
 
 	self.lock.Lock()
@@ -157,7 +182,7 @@ func (self *JobManager) getJob(hashid string) *models.Job {
 	return j
 }
 
-func (self *JobManager) getJobDetail(j *models.Job, fid string) *models.JobDetail {
+func (self *JobManager) GetJobDetail(j *models.Job, fid string) *models.JobDetail {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
@@ -179,11 +204,11 @@ func (self *JobManager) getJobDetail(j *models.Job, fid string) *models.JobDetai
 // implement task.TaskObserver
 func (self *JobManager) AddTask(t *task.Task) {
 	hashid := getHashIdFromTask(t)
-	j := self.getJob(hashid)
+	j := self.GetJob(hashid)
 	if j == nil {
 		return
 	}
-	jd := self.getJobDetail(j, getFidFromTask(t))
+	jd := self.GetJobDetail(j, getFidFromTask(t))
 	if jd == nil {
 		return
 	}
@@ -203,12 +228,13 @@ func (self *JobManager) DelTask(t *task.Task) {
 }
 
 func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState) {
+	uid, pid, _, typ := getMetaFromTask(t)
 	hashid := getHashIdFromTask(t)
-	j := self.getJob(hashid)
+	j := self.GetJob(hashid)
 	if j == nil {
 		return
 	}
-	jd := self.getJobDetail(j, getFidFromTask(t))
+	jd := self.GetJobDetail(j, getFidFromTask(t))
 	if jd == nil {
 		return
 	}
@@ -240,6 +266,7 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 		j.Finish()
 		self.lock.Lock()
 		delete(self.jobs, j.JobId) // 从表里删除
+		self.DelTrack(uid, pid, typ, false)
 		self.lock.Unlock()
 	}
 
@@ -257,4 +284,127 @@ func (self *JobManager) HasCachedJob(jobid string) bool {
 	self.lock.Lock()
 	_, ok := self.jobs[jobid]
 	return ok
+}
+
+func (self *JobManager) AddTrack(uid, pid string, typ int, mutex bool) {
+	if mutex {
+		self.lock.Lock()
+		defer self.lock.Unlock()
+	}
+
+	track, _ := self.track_pkgs[pid]
+	if track == nil {
+		track = NewTrack()
+		self.track_pkgs[pid] = track
+	}
+	if typ == cydex.UPLOAD {
+		track.Uploads[uid] = 1
+	} else {
+		track.Downloads[uid] = 1
+	}
+
+	track, _ = self.track_users[uid]
+	if track == nil {
+		track = NewTrack()
+		self.track_users[uid] = track
+	}
+	if typ == cydex.UPLOAD {
+		track.Uploads[pid] = 1
+	} else {
+		track.Downloads[pid] = 1
+	}
+}
+
+func (self *JobManager) DelTrack(uid, pid string, typ int, mutex bool) {
+	if mutex {
+		self.lock.Lock()
+		defer self.lock.Unlock()
+	}
+
+	track, _ := self.track_pkgs[pid]
+	if track != nil {
+		if typ == cydex.UPLOAD {
+			delete(track.Uploads, uid)
+		} else {
+			delete(track.Downloads, uid)
+		}
+		if len(track.Uploads) == 0 && len(track.Downloads) == 0 {
+			delete(self.track_pkgs, pid)
+		}
+	}
+
+	track, _ = self.track_users[uid]
+	if track != nil {
+		if typ == cydex.UPLOAD {
+			delete(track.Uploads, pid)
+		} else {
+			delete(track.Downloads, pid)
+		}
+		if len(track.Uploads) == 0 && len(track.Downloads) == 0 {
+			delete(self.track_users, uid)
+		}
+	}
+}
+
+func (self *JobManager) GetPkgTrack(pid string, typ int) (uids []string) {
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
+	var m map[string]int
+	track, _ := self.track_pkgs[pid]
+	if track != nil {
+		if typ == cydex.UPLOAD {
+			m = track.Uploads
+		} else {
+			m = track.Downloads
+		}
+		for k, _ := range m {
+			uids = append(uids, k)
+		}
+	}
+	return
+}
+
+func (self *JobManager) GetUserTrack(uid string, typ int) (pids []string) {
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
+	var m map[string]int
+	track, _ := self.track_users[uid]
+	if track != nil {
+		if typ == cydex.UPLOAD {
+			m = track.Uploads
+		} else {
+			m = track.Downloads
+		}
+		for k, _ := range m {
+			pids = append(pids, k)
+		}
+	}
+	return
+}
+
+// 从数据库中同步track信息
+func (self *JobManager) LoadTracks() error {
+	jobs, err := models.GetUnFinishedJobs()
+	if err != nil {
+		return err
+	}
+
+	defer self.lock.Unlock()
+	self.lock.Lock()
+	self.ClearTracks(false)
+	for _, j := range jobs {
+		self.AddTrack(j.Uid, j.Pid, j.Type, false)
+	}
+	return nil
+}
+
+func (self *JobManager) ClearTracks(mutex bool) {
+	if mutex {
+		defer self.lock.Unlock()
+		self.lock.Lock()
+	}
+	self.track_users = make(map[string]*Track)
+	self.track_pkgs = make(map[string]*Track)
 }

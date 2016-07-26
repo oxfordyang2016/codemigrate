@@ -61,26 +61,13 @@ func GetJob(jobid string, with_pkg bool) (*Job, error) {
 // 	return j, nil
 // }
 
-// 按照Uid和type查询job
-// @param with_details 是否包含详细信息
-// @param include_finished 是否包含已结束的job
-func GetJobsByUid(uid string, typ int, details, finished bool) ([]*Job, error) {
+// 查询未完成的任务
+func GetUnFinishedJobs() ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	var err error
-	sess := DB().Where("uid=? and type=?", uid, typ)
-	if !finished {
-		sess = sess.Where("finished=0")
-	}
-	if err = sess.Find(&jobs); err != nil {
+	if err = DB().Where("finished=0").Find(&jobs); err != nil {
 		return nil, err
 	}
-	// if details {
-	// 	for _, j := range jobs {
-	// 		if err = j.GetDetails(); err != nil {
-	// 			return nil, err
-	// 		}
-	// 	}
-	// }
 	return jobs, nil
 }
 

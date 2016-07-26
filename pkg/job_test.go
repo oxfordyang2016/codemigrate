@@ -25,6 +25,59 @@ func initDB() {
 	models.SyncTables()
 }
 
+func Test_Track(t *testing.T) {
+	u1 := "u1"
+	p1 := "p1"
+	u2 := "u2"
+	p2 := "p2"
+
+	Convey("Test track", t, func() {
+		Convey("Add track", func() {
+			JobMgr.AddTrack(u1, p1, cydex.UPLOAD, true)
+			JobMgr.AddTrack(u2, p1, cydex.DOWNLOAD, true)
+			JobMgr.AddTrack(u2, p2, cydex.DOWNLOAD, true)
+
+			So(JobMgr.track_users, ShouldHaveLength, 2)
+			So(JobMgr.track_pkgs, ShouldHaveLength, 2)
+		})
+
+		Convey("get user track", func() {
+			pids := JobMgr.GetUserTrack(u2, cydex.DOWNLOAD)
+			So(pids, ShouldHaveLength, 2)
+			So(p2, ShouldBeIn, pids)
+			So(p1, ShouldBeIn, pids)
+
+			pids = JobMgr.GetUserTrack(u1, cydex.DOWNLOAD)
+			So(pids, ShouldBeEmpty)
+		})
+
+		Convey("get pkg track", func() {
+			uids := JobMgr.GetPkgTrack(p1, cydex.DOWNLOAD)
+			So(uids, ShouldHaveLength, 1)
+			So(u2, ShouldBeIn, uids)
+			So(u1, ShouldNotBeIn, uids)
+
+			uids = JobMgr.GetPkgTrack(p2, cydex.DOWNLOAD)
+			So(uids, ShouldHaveLength, 1)
+		})
+
+		Convey("del track", func() {
+			uids := JobMgr.GetPkgTrack(p1, cydex.UPLOAD)
+			So(uids, ShouldHaveLength, 1)
+
+			JobMgr.DelTrack(u1, p1, cydex.UPLOAD, true)
+			uids = JobMgr.GetPkgTrack(p1, cydex.UPLOAD)
+			So(uids, ShouldBeEmpty)
+
+			JobMgr.DelTrack("no this uid", p2, cydex.UPLOAD, true)
+
+			uids = JobMgr.GetPkgTrack(p2, cydex.DOWNLOAD)
+			So(uids, ShouldHaveLength, 1)
+			So(u2, ShouldBeIn, uids)
+		})
+	})
+}
+
 func Test_CreateJob(t *testing.T) {
 	var err error
 	pid := "1234567890ab1111122222"
@@ -55,37 +108,37 @@ func Test_CreateJob(t *testing.T) {
 		})
 
 		Convey("Create upload job", func() {
-			_, err = JobMgr.CreateJob("1234567890ab", pid, cydex.UPLOAD)
+			err = JobMgr.CreateJob("1234567890ab", pid, cydex.UPLOAD)
 			So(err, ShouldBeNil)
-			hashid := GenerateHashId("1234567890ab", pid, cydex.UPLOAD)
+			hashid := HashJob("1234567890ab", pid, cydex.UPLOAD)
 			j, err := models.GetJob(hashid, true)
 			So(err, ShouldBeNil)
 			So(j, ShouldNotBeNil)
-			j = JobMgr.getJob(hashid)
+			j = JobMgr.GetJob(hashid)
 			So(j, ShouldNotBeNil)
 		})
 
 		Convey("Create download job", func() {
-			_, err = JobMgr.CreateJob("ab1234567890", pid, cydex.DOWNLOAD)
+			err = JobMgr.CreateJob("ab1234567890", pid, cydex.DOWNLOAD)
 			So(err, ShouldBeNil)
-			hashid := GenerateHashId("ab1234567890", pid, cydex.DOWNLOAD)
+			hashid := HashJob("ab1234567890", pid, cydex.DOWNLOAD)
 			j, err := models.GetJob(hashid, true)
 			So(err, ShouldBeNil)
 			So(j, ShouldNotBeNil)
-			j = JobMgr.getJob(hashid)
+			j = JobMgr.GetJob(hashid)
 			So(j, ShouldNotBeNil)
 
-			hashid = GenerateHashId("kk1234567890", pid, cydex.DOWNLOAD)
+			hashid = HashJob("kk1234567890", pid, cydex.DOWNLOAD)
 			j, err = models.GetJob(hashid, true)
 			So(j, ShouldBeNil)
 		})
 
 		Convey("update task", func() {
-			hashid := GenerateHashId("1234567890ab", pid, cydex.UPLOAD)
-			j := JobMgr.getJob(hashid)
+			hashid := HashJob("1234567890ab", pid, cydex.UPLOAD)
+			j := JobMgr.GetJob(hashid)
 
 			Convey("add task", func() {
-				jd := JobMgr.getJobDetail(j, fid1)
+				jd := JobMgr.GetJobDetail(j, fid1)
 				So(jd.StartTime.IsZero(), ShouldBeTrue)
 				t := &task.Task{
 					TaskId: "t1",
@@ -105,7 +158,7 @@ func Test_CreateJob(t *testing.T) {
 			})
 
 			Convey("task transferring", func() {
-				jd := JobMgr.getJobDetail(j, fid1)
+				jd := JobMgr.GetJobDetail(j, fid1)
 				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_NONE)
 				state := &transfer.TaskState{
 					TaskId:     "t1",
@@ -132,7 +185,7 @@ func Test_CreateJob(t *testing.T) {
 			})
 
 			Convey("task end", func() {
-				jd := JobMgr.getJobDetail(j, fid1)
+				jd := JobMgr.GetJobDetail(j, fid1)
 				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_DOING)
 				state := &transfer.TaskState{
 					TaskId:     "t1",
@@ -163,7 +216,7 @@ func Test_CreateJob(t *testing.T) {
 			Convey("job end", func() {
 				So(j.Finished, ShouldBeFalse)
 
-				jd := JobMgr.getJobDetail(j, fid2)
+				jd := JobMgr.GetJobDetail(j, fid2)
 				state := &transfer.TaskState{
 					TaskId:     "t2",
 					Sid:        sid1_of_fid2,
