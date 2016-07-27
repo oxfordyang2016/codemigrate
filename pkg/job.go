@@ -91,9 +91,13 @@ func NewTrack() *Track {
 	return t
 }
 
+type JobRuntime struct {
+	*models.Job
+	NumFinishedDetails int
+}
+
 type JobManager struct {
-	lock sync.Mutex
-	// jobs               map[string]*models.Job // string is hashid
+	lock               sync.Mutex
 	cache_sync_timeout time.Duration //cache同步超时时间
 
 	jobs map[string]*models.Job // jobid

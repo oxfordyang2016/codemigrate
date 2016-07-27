@@ -190,14 +190,15 @@ func (self *TaskManager) DelTask(taskid string) {
 	Logger.Printf("Del task(%s) %+v\n", taskid, t)
 }
 
-func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (rsp *transfer.UploadTaskRsp, err error) {
+func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (rsp *transfer.UploadTaskRsp, node *trans.Node, err error) {
 	if req == nil || req.TaskId == "" {
-		return nil, errors.New("Invalid req")
+		err = errors.New("Invalid req")
+		return
 	}
 	if self.scheduler == nil {
-		return nil, errors.New("No Scheduler, please set first")
+		err = errors.New("No Scheduler, please set first")
+		return
 	}
-	var node *trans.Node
 
 	if node, err = self.scheduler.DispatchUpload(req); err != nil {
 		return nil, err
@@ -229,17 +230,18 @@ func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (
 	return
 }
 
-func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duration) (rsp *transfer.DownloadTaskRsp, err error) {
+func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duration) (rsp *transfer.DownloadTaskRsp, node *trans.Node, err error) {
 	if req == nil || req.TaskId == "" {
-		return nil, errors.New("Invalid req")
+		err = errors.New("Invalid req")
+		return
 	}
 	if self.scheduler == nil {
-		return nil, errors.New("No Scheduler, please set first")
+		err = errors.New("No Scheduler, please set first")
+		return
 	}
-	var node *trans.Node
 
 	if node, err = self.scheduler.DispatchDownload(req); err != nil {
-		return nil, err
+		return
 	}
 	if node == nil {
 		// Log

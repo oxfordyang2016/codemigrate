@@ -48,18 +48,25 @@ func GetJob(jobid string, with_pkg bool) (*Job, error) {
 	return j, err
 }
 
-// // 按照(uid, pid, type)获取一个job对象
-// func GetActiveJobByUidAndPid(uid, pid string, typ int, details bool) (*Job, error) {
-// 	j := new(Job)
-// 	var existed bool
-// 	if existed, err = DB().Where("uid=? and pid=? and type=? and finished=0", uid, pid, typ).Get(j); err != nil {
-// 		return nil, nil
-// 	}
-// 	if !existed {
-// 		return nil, nil
-// 	}
-// 	return j, nil
-// }
+func GetJobsByUid(uid string, typ int) ([]*Job, error) {
+	jobs := make([]*Job, 0)
+	var err error
+	sess := DB().Where("uid=? and type=?", uid, typ)
+	if err = sess.Find(&jobs); err != nil {
+		return nil, err
+	}
+	return jobs, nil
+}
+
+func GetJobsByPid(pid string, typ int) ([]*Job, error) {
+	jobs := make([]*Job, 0)
+	var err error
+	sess := DB().Where("pid=? and type=?", pid, typ)
+	if err = sess.Find(&jobs); err != nil {
+		return nil, err
+	}
+	return jobs, nil
+}
 
 // 查询未完成的任务
 func GetUnFinishedJobs() ([]*Job, error) {
