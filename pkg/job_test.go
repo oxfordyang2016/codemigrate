@@ -138,7 +138,7 @@ func Test_CreateJob(t *testing.T) {
 			j := JobMgr.GetJob(hashid)
 
 			Convey("add task", func() {
-				jd := JobMgr.GetJobDetail(j, fid1)
+				jd := JobMgr.GetJobDetail(j.JobId, fid1)
 				So(jd.StartTime.IsZero(), ShouldBeTrue)
 				t := &task.Task{
 					TaskId: "t1",
@@ -158,8 +158,8 @@ func Test_CreateJob(t *testing.T) {
 			})
 
 			Convey("task transferring", func() {
-				jd := JobMgr.GetJobDetail(j, fid1)
-				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_NONE)
+				jd := JobMgr.GetJobDetail(j.JobId, fid1)
+				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_IDLE)
 				state := &transfer.TaskState{
 					TaskId:     "t1",
 					Sid:        sid1_of_fid1,
@@ -185,7 +185,7 @@ func Test_CreateJob(t *testing.T) {
 			})
 
 			Convey("task end", func() {
-				jd := JobMgr.GetJobDetail(j, fid1)
+				jd := JobMgr.GetJobDetail(j.JobId, fid1)
 				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_DOING)
 				state := &transfer.TaskState{
 					TaskId:     "t1",
@@ -216,7 +216,7 @@ func Test_CreateJob(t *testing.T) {
 			Convey("job end", func() {
 				So(j.Finished, ShouldBeFalse)
 
-				jd := JobMgr.GetJobDetail(j, fid2)
+				jd := JobMgr.GetJobDetail(j.JobId, fid2)
 				state := &transfer.TaskState{
 					TaskId:     "t2",
 					Sid:        sid1_of_fid2,

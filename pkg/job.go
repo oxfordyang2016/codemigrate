@@ -66,16 +66,39 @@ func getFidFromTask(t *task.Task) (fid string) {
 	return
 }
 
-func updateJobDetailFinishedSize(jd *models.JobDetail, sid string, total_size uint64) uint64 {
-	if jd.SegsRecvdSize == nil {
-		jd.SegsRecvdSize = make(map[string]uint64)
+// 获取运行时segs的信息, 没有就添加进runtime
+func getSegRuntime(jd *models.JobDetail, sid string) (s *models.Seg) {
+	if jd.Segs == nil {
+		jd.Segs = make(map[string]*models.Seg)
 	}
-	jd.SegsRecvdSize[sid] = total_size
+	s, _ = jd.Segs[sid]
+	if s == nil {
+		s = new(models.Seg)
+		s.Sid = sid
+		jd.Segs[sid] = s
+	}
+	return
+}
+
+func updateJobDetail(jd *models.JobDetail) {
+	// finished size
 	total := uint64(0)
-	for _, v := range jd.SegsRecvdSize {
-		total += v
+	for _, s := range jd.Segs {
+		total += s.Size
 	}
-	return total
+	jd.FinishedSize = total
+
+	// state
+	for _, s := range jd.Segs {
+		if s.State == cydex.TRANSFER_STATE_DOING {
+			jd.State = cydex.TRANSFER_STATE_DOING
+			break
+		}
+		if s.State == cydex.TRANSFER_STATE_PAUSE {
+			jd.State = cydex.TRANSFER_STATE_PAUSE
+			break
+		}
+	}
 }
 
 type Track struct {
@@ -100,10 +123,9 @@ type JobManager struct {
 	lock               sync.Mutex
 	cache_sync_timeout time.Duration //cache同步超时时间
 
-	jobs map[string]*models.Job // jobid
-	// job_details map[string]*models.JobDetail // jdid
-	track_users map[string]*Track // uid->track, track里记录上传下载的pid
-	track_pkgs  map[string]*Track // pid->track, track里记录上传下载的uid
+	jobs        map[string]*models.Job // jobid
+	track_users map[string]*Track      // uid->track, track里记录上传下载的pid
+	track_pkgs  map[string]*Track      // pid->track, track里记录上传下载的uid
 }
 
 func NewJobManager() *JobManager {
@@ -153,7 +175,7 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 		if _, err := session.Insert(jd); err != nil {
 			return err
 		}
-		jd.SegsRecvdSize = make(map[string]uint64)
+		jd.Segs = make(map[string]*models.Seg)
 		j.Details[f.Fid] = jd
 	}
 	session.Commit()
@@ -166,6 +188,7 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 	return nil
 }
 
+// 从cache里取; 没有的话从数据库取; 如果是非finished,则加入cache
 func (self *JobManager) GetJob(hashid string) *models.Job {
 	var err error
 
@@ -176,43 +199,41 @@ func (self *JobManager) GetJob(hashid string) *models.Job {
 	if ok {
 		return j
 	}
+
 	if j, err = models.GetJob(hashid, true); err != nil {
 		return nil
 	}
 	if j != nil {
-		// save to cache
-		self.jobs[hashid] = j
+		if !j.Finished {
+			j.GetDetails()
+			// save to cache
+			self.jobs[hashid] = j
+		}
 	}
 	return j
 }
 
-func (self *JobManager) GetJobDetail(j *models.Job, fid string) *models.JobDetail {
-	self.lock.Lock()
-	defer self.lock.Unlock()
-
-	if j.Details == nil {
-		j.Details = make(map[string]*models.JobDetail)
+// 从cache里取,没有则从数据库取
+func (self *JobManager) GetJobDetail(jobid, fid string) (jd *models.JobDetail) {
+	var err error
+	j := self.GetJob(jobid)
+	if j == nil {
+		return
 	}
-	jd, ok := j.Details[fid]
-	if ok {
-		return jd
+	var ok bool
+	jd, ok = j.Details[fid]
+	if !ok {
+		if jd, err = models.GetJobDetail(jobid, fid); err != nil {
+			return nil
+		}
 	}
-	jd = j.GetDetail(fid)
-	if jd == nil {
-		return nil
-	}
-	j.Details[fid] = jd
-	return jd
+	return
 }
 
 // implement task.TaskObserver
 func (self *JobManager) AddTask(t *task.Task) {
 	hashid := getHashIdFromTask(t)
-	j := self.GetJob(hashid)
-	if j == nil {
-		return
-	}
-	jd := self.GetJobDetail(j, getFidFromTask(t))
+	jd := self.GetJobDetail(hashid, getFidFromTask(t))
 	if jd == nil {
 		return
 	}
@@ -233,37 +254,49 @@ func (self *JobManager) DelTask(t *task.Task) {
 
 func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState) {
 	uid, pid, _, typ := getMetaFromTask(t)
+	sid := state.Sid
+	if sid == "" || uid == "" || pid == "" {
+		return
+	}
 	hashid := getHashIdFromTask(t)
 	j := self.GetJob(hashid)
 	if j == nil {
 		return
 	}
-	jd := self.GetJobDetail(j, getFidFromTask(t))
+	jd := self.GetJobDetail(hashid, getFidFromTask(t))
 	if jd == nil {
 		return
 	}
+	if jd.File == nil {
+		jd.GetFile()
+	}
+	seg_rt := getSegRuntime(jd, sid)
 
 	// 更新JobDetails状态, 根据判断更新Job状态, 是否finished?
-	jd.FinishedSize = updateJobDetailFinishedSize(jd, state.Sid, state.TotalBytes)
+	seg_rt.Size = state.TotalBytes
 	jd.Bitrate = state.Bitrate
 	update := true
 
 	s := strings.ToLower(state.State)
 	switch s {
 	case "transferring":
-		jd.State = cydex.TRANSFER_STATE_DOING
+		seg_rt.State = cydex.TRANSFER_STATE_DOING
 	case "interrupt":
-		jd.State = cydex.TRANSFER_STATE_PAUSE
+		seg_rt.State = cydex.TRANSFER_STATE_PAUSE
 	case "end":
-		if jd.File == nil {
-			jd.GetFile()
-		}
+		seg_rt.State = cydex.TRANSFER_STATE_DONE
 		jd.NumFinishedSegs++
-		if jd.File.NumSegs == jd.NumFinishedSegs {
-			jd.Finish()
-			update = false
-			j.NumFinishedDetails++
-		}
+	default:
+		return
+	}
+
+	updateJobDetail(jd)
+
+	// jd is finished
+	if jd.NumFinishedSegs == jd.File.NumSegs {
+		jd.Finish()
+		update = false
+		j.NumFinishedDetails++
 	}
 
 	if j.NumFinishedDetails == int(j.Pkg.NumFiles) {
@@ -272,6 +305,14 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 		delete(self.jobs, j.JobId) // 从表里删除
 		self.DelTrack(uid, pid, typ, false)
 		self.lock.Unlock()
+	}
+
+	//jzh: 将上传seg的发生变化的状态更新进数据库
+	if typ == cydex.UPLOAD {
+		seg_m, _ := models.GetSeg(sid)
+		if seg_m != nil && seg_m.State != seg_rt.State {
+			seg_m.SetState(seg_rt.State)
+		}
 	}
 
 	if update && time.Since(jd.UpdateAt) >= self.cache_sync_timeout {
@@ -383,6 +424,32 @@ func (self *JobManager) GetUserTrack(uid string, typ int) (pids []string) {
 		}
 		for k, _ := range m {
 			pids = append(pids, k)
+		}
+	}
+	return
+}
+
+// 从cache中获取jobs信息
+func (self *JobManager) GetJobsByUid(uid string, typ int) (jobs []*models.Job, err error) {
+	pids := self.GetUserTrack(uid, typ)
+	for _, pid := range pids {
+		hashid := HashJob(uid, pid, typ)
+		job := self.GetJob(hashid)
+		if job != nil {
+			jobs = append(jobs, job)
+		}
+	}
+	return
+}
+
+// 从cache中获取jobs信息
+func (self *JobManager) GetJobsByPid(pid string, typ int) (jobs []*models.Job, err error) {
+	uids := self.GetPkgTrack(pid, typ)
+	for _, uid := range uids {
+		hashid := HashJob(uid, pid, typ)
+		job := self.GetJob(hashid)
+		if job != nil {
+			jobs = append(jobs, job)
 		}
 	}
 	return

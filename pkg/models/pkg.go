@@ -42,6 +42,14 @@ func CreatePkg(pid, title, notes string, num_files uint64, size uint64, encrypti
 	return p, nil
 }
 
+func GetPkgs() (pkgs []*Pkg, err error) {
+	pkgs = make([]*Pkg, 0)
+	if err := DB().Find(&pkgs); err != nil {
+		return nil, err
+	}
+	return
+}
+
 func GetPkg(pid string, with_files bool) (p *Pkg, err error) {
 	p = new(Pkg)
 	var existed bool

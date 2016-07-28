@@ -9,6 +9,7 @@ import (
 	"cydex/transfer"
 	"encoding/json"
 	"github.com/astaxie/beego"
+	"io/ioutil"
 	"time"
 )
 
@@ -21,16 +22,23 @@ type TransferController struct {
 }
 
 func (self *TransferController) Post() {
-	req := new(transfer.TransferReq)
-	rsp := new(transfer.TransferRsp)
+	req := new(cydex.TransferReq)
+	rsp := new(cydex.TransferRsp)
 
 	defer func() {
 		self.Data["json"] = rsp
 		self.ServeJSON()
 	}()
 
+	r := self.Ctx.Request
+	defer r.Body.Close()
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		rsp.Error = cydex.ErrInvalidParam
+		return
+	}
 	// 获取请求
-	if err := json.Unmarshal(self.Ctx.Input.RequestBody, req); err != nil {
+	if err := json.Unmarshal(body, req); err != nil {
 		rsp.Error = cydex.ErrInvalidParam
 		return
 	}
@@ -51,9 +59,10 @@ func (self *TransferController) Post() {
 }
 
 func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cydex.TransferRsp) {
+	uid := self.GetString(":uid")
 	task_req := new(task.DownloadReq)
 	task_req.Pid = pkg.GetUnpacker().GetPidFromFid(req.Fid)
-	task_req.DownloadReq = &transfer.DownloadTaskReq{
+	task_req.DownloadTaskReq = &transfer.DownloadTaskReq{
 		TaskId:  task.GenerateTaskId(),
 		Uid:     uid,
 		Fid:     req.Fid,
@@ -66,14 +75,14 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 		if seg != nil {
 			storage = seg.Storage
 		}
-		task_req.DownloadReq.SidStorage = append(task_req.DownloadReq.SidStorage, storage)
+		task_req.DownloadTaskReq.SidStorage = append(task_req.DownloadTaskReq.SidStorage, storage)
 	}
 
 	var err error
 	var task_rsp *transfer.DownloadTaskRsp
 	var node *trans.Node
 
-	if task_rsp, node, err = task.DispatchDownload(task_req, DISPATCH_TIMEOUT); err != nil {
+	if task_rsp, node, err = task.TaskMgr.DispatchDownload(task_req, DISPATCH_TIMEOUT); err != nil {
 		rsp.Error = cydex.ErrInvalidParam
 		return
 	}
@@ -85,9 +94,10 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 }
 
 func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex.TransferRsp) {
+	uid := self.GetString(":uid")
 	task_req := new(task.UploadReq)
 	task_req.Pid = pkg.GetUnpacker().GetPidFromFid(req.Fid)
-	task_req.UploadReq = &transfer.UploadTaskReq{
+	task_req.UploadTaskReq = &transfer.UploadTaskReq{
 		TaskId:  task.GenerateTaskId(),
 		Uid:     uid,
 		Fid:     req.Fid,
@@ -96,11 +106,11 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 	for _, sid := range req.SegIds {
 		seg, _ := pkg_model.GetSeg(sid)
 		if seg != nil {
-			task_req.UploadReq.Size += seg.Size
+			task_req.UploadTaskReq.Size += seg.Size
 		}
 	}
 
-	task_rsp, node, err := task.DispatchUpload(task_req, DISPATCH_TIMEOUT)
+	task_rsp, node, err := task.TaskMgr.DispatchUpload(task_req, DISPATCH_TIMEOUT)
 	if err != nil {
 		rsp.Error = cydex.ErrInnerServer
 		return

@@ -49,6 +49,17 @@ func GetSegs(fid string) ([]*Seg, error) {
 	return sa, nil
 }
 
+func (self *Seg) SetState(state int) error {
+	s := &Seg{
+		State: state,
+	}
+	_, err := DB().Id(self.Id).Cols("state").Update(s)
+	if err == nil {
+		self.State = state
+	}
+	return err
+}
+
 func (s *Seg) TableName() string {
 	return "package_seg"
 }

@@ -43,15 +43,18 @@ func GetJob(jobid string, with_pkg bool) (*Job, error) {
 		return nil, nil
 	}
 	if with_pkg {
-		j.Pkg, err = GetPkg(j.Pid, false)
+		err = j.GetPkg(false)
 	}
 	return j, err
 }
 
-func GetJobsByUid(uid string, typ int) ([]*Job, error) {
+func GetJobsByUid(uid string, typ int, p *cydex.Pagination) ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	var err error
 	sess := DB().Where("uid=? and type=?", uid, typ)
+	if p != nil {
+		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
+	}
 	if err = sess.Find(&jobs); err != nil {
 		return nil, err
 	}
@@ -105,18 +108,19 @@ func (self *Job) TableName() string {
 	return "package_job"
 }
 
-// func (self *Job) GetDetails() error {
-// 	ds, err := GetJobDetails(self.JobId)
-// 	if err == nil {
-// 		if self.Details == nil {
-// 			self.Details = make(map[string]*JobDetail)
-// 		}
-// 		for _, d := range ds {
-// 			self.
-// 		}
-// 	}
-// 	return err
-// }
+func (self *Job) GetDetails() error {
+	jds, err := GetJobDetails(self.JobId)
+	if err != nil {
+		return err
+	}
+	if self.Details == nil {
+		self.Details = make(map[string]*JobDetail)
+	}
+	for _, jd := range jds {
+		self.Details[jd.Fid] = jd
+	}
+	return err
+}
 
 func (self *Job) Finish() error {
 	j := &Job{
@@ -142,6 +146,13 @@ func (self *Job) GetDetail(fid string) *JobDetail {
 	return jd
 }
 
+func (self *Job) GetPkg(with_files bool) (err error) {
+	if self.Pkg, err = GetPkg(self.Pid, with_files); err != nil {
+		return
+	}
+	return
+}
+
 type JobDetail struct {
 	Id              uint64    `xorm:"pk autoincr"`
 	JobId           string    `xorm:"not null"`
@@ -158,8 +169,8 @@ type JobDetail struct {
 	UpdateAt        time.Time `xorm:"DateTime updated"`
 
 	// runtime
-	Bitrate       uint64            `xorm:"-"`
-	SegsRecvdSize map[string]uint64 `xorm:"-"` //sid->size
+	Bitrate uint64          `xorm:"-"`
+	Segs    map[string]*Seg `xorm:"-"` //sid->seg
 }
 
 // 批量创建

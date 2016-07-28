@@ -85,6 +85,8 @@ type Task struct {
 	Node        *trans.Node        // 该任务分配的传输节点
 	UploadReq   *UploadReq
 	DownloadReq *DownloadReq
+	Fid         string
+	SidList     []string
 	CreateAt    time.Time
 	UpdateAt    time.Time
 }
@@ -201,7 +203,7 @@ func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (
 	}
 
 	if node, err = self.scheduler.DispatchUpload(req); err != nil {
-		return nil, err
+		return
 	}
 	if node == nil {
 		// Log
@@ -225,6 +227,8 @@ func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (
 		UploadReq: req,
 		CreateAt:  time.Now(),
 		UpdateAt:  time.Now(),
+		Fid:       req.UploadTaskReq.Fid,
+		SidList:   req.UploadTaskReq.SidList,
 	}
 	TaskMgr.AddTask(t)
 	return
@@ -264,6 +268,8 @@ func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duratio
 		DownloadReq: req,
 		CreateAt:    time.Now(),
 		UpdateAt:    time.Now(),
+		Fid:         req.DownloadTaskReq.Fid,
+		SidList:     req.DownloadTaskReq.SidList,
 	}
 	TaskMgr.AddTask(t)
 	return
