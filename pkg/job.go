@@ -178,7 +178,7 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 		}
 		// jzh: 如果是0的文件或者文件夹,则状态就置为DONE, 因为客户端不会发送传输命令
 		if f.Size == 0 {
-			jd.State = TRANSFER_STATE_DONE
+			jd.State = cydex.TRANSFER_STATE_DONE
 		}
 		if _, err := session.Insert(jd); err != nil {
 			return err
