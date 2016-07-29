@@ -7,10 +7,28 @@ import (
 	pkg_model "./pkg/models"
 	trans_model "./transfer/models"
 	"github.com/astaxie/beego"
+	clog "github.com/cihub/seelog"
 )
+
+func initLog() {
+	cfgfiles := []string{
+		"/opt/cydex/etc/ts_seelog.xml",
+		"seelog.xml",
+	}
+	for _, file := range cfgfiles {
+		logger, err := clog.LoggerFromConfigAsFile(file)
+		if err != nil {
+			println(err.Error())
+			continue
+		}
+		clog.ReplaceLogger(logger)
+		break
+	}
+}
 
 func initDB() (err error) {
 	// 创建数据库
+	clog.Info("init db")
 	if err = db.CreateEngine("sqlite3", "/tmp/cydex.sqlite3", false); err != nil {
 		return
 	}
@@ -25,12 +43,20 @@ func initDB() (err error) {
 }
 
 func start() {
-	initDB()
+	initLog()
+	err := initDB()
+	if err != nil {
+		clog.Criticalf("Init DB failed: %s", err)
+		panic("Shutdown")
+	}
 	// 设置拆包器
 	pkg.SetUnpacker(pkg.NewDefaultUnpacker(50*1024*1024, 25))
+	// 从数据库导入track
+	pkg.JobMgr.LoadTracks()
 }
 
 func main() {
 	start()
-	beego.Run()
+	clog.Info("start")
+	beego.Run(":8088")
 }

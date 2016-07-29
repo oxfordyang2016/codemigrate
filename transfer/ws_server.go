@@ -4,6 +4,7 @@ import (
 	"cydex/transfer"
 	"encoding/json"
 	"fmt"
+	clog "github.com/cihub/seelog"
 	"golang.org/x/net/websocket"
 	"log"
 	"net/http"
@@ -69,8 +70,8 @@ func (s *WSServer) connHandle(ws *websocket.Conn) {
 	// cleanup
 	defer func() {
 		if node != nil {
+			clog.Warnf("Node disconnected: %+v", node)
 			node.Close(true)
-			Logger.Printf("Node Disconnected: %+v\n", node)
 		}
 	}()
 
@@ -81,18 +82,19 @@ func (s *WSServer) connHandle(ws *websocket.Conn) {
 			log.Print(err)
 			break
 		}
-		log.Print(msgstring)
+		clog.Trace(msgstring)
 		if err = json.Unmarshal([]byte(msgstring), &msg); err != nil {
-			log.Print(err)
-			break
+			clog.Warnf("json unmarshal error:%s", err)
+			continue
 		}
 
 		rsp, err = node.HandleMsg(&msg)
 		if rsp != nil {
+			clog.Trace(rsp)
 			node.SendMessage(rsp)
 		}
 		if err != nil {
-			Logger.Printf("node %s handle msg error: %s\n", node, err)
+			clog.Errorf("%s handle msg error: %s", node, err)
 			break
 		}
 	}

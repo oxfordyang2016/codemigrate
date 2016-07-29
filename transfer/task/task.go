@@ -6,9 +6,8 @@ import (
 	"cydex/transfer"
 	"errors"
 	"fmt"
+	clog "github.com/cihub/seelog"
 	"github.com/pborman/uuid"
-	"log"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -20,18 +19,10 @@ const (
 
 var (
 	TaskMgr *TaskManager
-	Logger  *log.Logger
 )
 
 func init() {
-	Logger = log.New(os.Stderr, "task", log.LstdFlags|log.Lshortfile)
 	TaskMgr = NewTaskManager()
-}
-
-func SetLogger(l *log.Logger) {
-	if l != nil {
-		Logger = l
-	}
 }
 
 func GenerateTaskId() string {
@@ -64,8 +55,6 @@ type DownloadReq struct {
 	*transfer.DownloadTaskReq
 	Pid             string
 	FinishedSidList []string //已经下完的片段
-	CreateAt        time.Time
-	UpdateAt        time.Time
 }
 
 func NewDownloadReq(r *transfer.DownloadTaskReq, pid string, finished_sid_list []string) (req *DownloadReq, err error) {
@@ -87,6 +76,8 @@ type Task struct {
 	Node        *trans.Node        // 该任务分配的传输节点
 	UploadReq   *UploadReq
 	DownloadReq *DownloadReq
+	Fid         string
+	SidList     []string
 	CreateAt    time.Time
 	UpdateAt    time.Time
 }
@@ -128,7 +119,7 @@ func NewTaskManager() *TaskManager {
 }
 
 func (self *TaskManager) SetScheduler(s TaskScheduler) {
-	Logger.Printf("Set scheduler as %s\n", s.String())
+	clog.Infof("Task Manager Set scheduler: %s\n", s.String())
 	self.scheduler = s
 }
 
@@ -161,7 +152,7 @@ func (self *TaskManager) AddTask(t *Task) {
 
 	defer func() {
 		self.lock.Unlock()
-		Logger.Printf("Add task %s\n", t)
+		clog.Infof("Add task %s", t)
 	}()
 
 	self.lock.Lock()
@@ -189,20 +180,21 @@ func (self *TaskManager) DelTask(taskid string) {
 			o.DelTask(t)
 		}
 	}
-	Logger.Printf("Del task(%s) %+v\n", taskid, t)
+	clog.Infof("Del task(%s) %+v", taskid, t)
 }
 
-func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (rsp *transfer.UploadTaskRsp, err error) {
+func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (rsp *transfer.UploadTaskRsp, node *trans.Node, err error) {
 	if req == nil || req.TaskId == "" {
-		return nil, errors.New("Invalid req")
+		err = errors.New("Invalid req")
+		return
 	}
 	if self.scheduler == nil {
-		return nil, errors.New("No Scheduler, please set first")
+		err = errors.New("No Scheduler, please set first")
+		return
 	}
-	var node *trans.Node
 
 	if node, err = self.scheduler.DispatchUpload(req); err != nil {
-		return nil, err
+		return
 	}
 	if node == nil {
 		// Log
@@ -226,22 +218,25 @@ func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (
 		UploadReq: req,
 		CreateAt:  time.Now(),
 		UpdateAt:  time.Now(),
+		Fid:       req.UploadTaskReq.Fid,
+		SidList:   req.UploadTaskReq.SidList,
 	}
 	TaskMgr.AddTask(t)
 	return
 }
 
-func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duration) (rsp *transfer.DownloadTaskRsp, err error) {
+func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duration) (rsp *transfer.DownloadTaskRsp, node *trans.Node, err error) {
 	if req == nil || req.TaskId == "" {
-		return nil, errors.New("Invalid req")
+		err = errors.New("Invalid req")
+		return
 	}
 	if self.scheduler == nil {
-		return nil, errors.New("No Scheduler, please set first")
+		err = errors.New("No Scheduler, please set first")
+		return
 	}
-	var node *trans.Node
 
 	if node, err = self.scheduler.DispatchDownload(req); err != nil {
-		return nil, err
+		return
 	}
 	if node == nil {
 		// Log
@@ -264,6 +259,8 @@ func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duratio
 		DownloadReq: req,
 		CreateAt:    time.Now(),
 		UpdateAt:    time.Now(),
+		Fid:         req.DownloadTaskReq.Fid,
+		SidList:     req.DownloadTaskReq.SidList,
 	}
 	TaskMgr.AddTask(t)
 	return
@@ -279,7 +276,7 @@ func (self *TaskManager) OnTaskStateNotify(nid string, state *transfer.TaskState
 }
 
 func (self *TaskManager) handleTaskState(state *transfer.TaskState) (err error) {
-	Logger.Printf("TaskState: %+v\n", state)
+	clog.Debugf("TaskState: %+v\n", state)
 	t := self.GetTask(state.TaskId)
 	if t != nil {
 		t.UpdateAt = time.Now()
@@ -291,6 +288,7 @@ func (self *TaskManager) handleTaskState(state *transfer.TaskState) (err error) 
 	}
 	self.lock.Unlock()
 
+	// TODO 这里可以记录有多少的seg已经完成
 	// task有多个seg, 只有这些seg均end了,才触发DelTask~~~
 	if state.Sid == "" {
 		// sid为空说明是针对整个task的

@@ -43,44 +43,41 @@ func GetJob(jobid string, with_pkg bool) (*Job, error) {
 		return nil, nil
 	}
 	if with_pkg {
-		j.Pkg, err = GetPkg(j.Pid, false)
+		err = j.GetPkg(false)
 	}
 	return j, err
 }
 
-// // 按照(uid, pid, type)获取一个job对象
-// func GetActiveJobByUidAndPid(uid, pid string, typ int, details bool) (*Job, error) {
-// 	j := new(Job)
-// 	var existed bool
-// 	if existed, err = DB().Where("uid=? and pid=? and type=? and finished=0", uid, pid, typ).Get(j); err != nil {
-// 		return nil, nil
-// 	}
-// 	if !existed {
-// 		return nil, nil
-// 	}
-// 	return j, nil
-// }
-
-// 按照Uid和type查询job
-// @param with_details 是否包含详细信息
-// @param include_finished 是否包含已结束的job
-func GetJobsByUid(uid string, typ int, details, finished bool) ([]*Job, error) {
+func GetJobsByUid(uid string, typ int, p *cydex.Pagination) ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	var err error
 	sess := DB().Where("uid=? and type=?", uid, typ)
-	if !finished {
-		sess = sess.Where("finished=0")
+	if p != nil {
+		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
 	}
 	if err = sess.Find(&jobs); err != nil {
 		return nil, err
 	}
-	// if details {
-	// 	for _, j := range jobs {
-	// 		if err = j.GetDetails(); err != nil {
-	// 			return nil, err
-	// 		}
-	// 	}
-	// }
+	return jobs, nil
+}
+
+func GetJobsByPid(pid string, typ int) ([]*Job, error) {
+	jobs := make([]*Job, 0)
+	var err error
+	sess := DB().Where("pid=? and type=?", pid, typ)
+	if err = sess.Find(&jobs); err != nil {
+		return nil, err
+	}
+	return jobs, nil
+}
+
+// 查询未完成的任务
+func GetUnFinishedJobs() ([]*Job, error) {
+	jobs := make([]*Job, 0)
+	var err error
+	if err = DB().Where("finished=0").Find(&jobs); err != nil {
+		return nil, err
+	}
 	return jobs, nil
 }
 
@@ -111,18 +108,19 @@ func (self *Job) TableName() string {
 	return "package_job"
 }
 
-// func (self *Job) GetDetails() error {
-// 	ds, err := GetJobDetails(self.JobId)
-// 	if err == nil {
-// 		if self.Details == nil {
-// 			self.Details = make(map[string]*JobDetail)
-// 		}
-// 		for _, d := range ds {
-// 			self.
-// 		}
-// 	}
-// 	return err
-// }
+func (self *Job) GetDetails() error {
+	jds, err := GetJobDetails(self.JobId)
+	if err != nil {
+		return err
+	}
+	if self.Details == nil {
+		self.Details = make(map[string]*JobDetail)
+	}
+	for _, jd := range jds {
+		self.Details[jd.Fid] = jd
+	}
+	return err
+}
 
 func (self *Job) Finish() error {
 	j := &Job{
@@ -148,6 +146,13 @@ func (self *Job) GetDetail(fid string) *JobDetail {
 	return jd
 }
 
+func (self *Job) GetPkg(with_files bool) (err error) {
+	if self.Pkg, err = GetPkg(self.Pid, with_files); err != nil {
+		return
+	}
+	return
+}
+
 type JobDetail struct {
 	Id              uint64    `xorm:"pk autoincr"`
 	JobId           string    `xorm:"not null"`
@@ -164,8 +169,8 @@ type JobDetail struct {
 	UpdateAt        time.Time `xorm:"DateTime updated"`
 
 	// runtime
-	Bitrate       uint64            `xorm:"-"`
-	SegsRecvdSize map[string]uint64 `xorm:"-"` //sid->size
+	Bitrate uint64          `xorm:"-"`
+	Segs    map[string]*Seg `xorm:"-"` //sid->seg
 }
 
 // 批量创建
