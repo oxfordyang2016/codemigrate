@@ -11,7 +11,10 @@ import (
 )
 
 func initLog() {
-	cfgfiles := []string{"seelog.xml", "/opt/cydex/seelog.xml"}
+	cfgfiles := []string{
+		"/opt/cydex/etc/ts_seelog.xml",
+		"seelog.xml",
+	}
 	for _, file := range cfgfiles {
 		logger, err := clog.LoggerFromConfigAsFile(file)
 		if err != nil {
@@ -25,6 +28,7 @@ func initLog() {
 
 func initDB() (err error) {
 	// 创建数据库
+	clog.Info("init db")
 	if err = db.CreateEngine("sqlite3", "/tmp/cydex.sqlite3", false); err != nil {
 		return
 	}
@@ -53,6 +57,6 @@ func start() {
 
 func main() {
 	start()
-	clog.Info("Start")
+	clog.Info("start")
 	beego.Run(":8088")
 }

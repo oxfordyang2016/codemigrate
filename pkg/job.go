@@ -9,6 +9,7 @@ import (
 	"cydex"
 	"cydex/transfer"
 	"fmt"
+	clog "github.com/cihub/seelog"
 	"strings"
 	"sync"
 	"time"
@@ -139,11 +140,13 @@ func NewJobManager() *JobManager {
 
 // 创建一个新任务, 因为是活动任务,会加入cache
 func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
+	clog.Infof("create job: u[%s], p[%s], t[%d]", uid, pid, typ)
 	session := models.DB().NewSession()
 	session.Begin()
 
 	defer func() {
 		if err != nil {
+			clog.Errorf("create job failed: %s", err)
 			session.Rollback()
 		}
 		session.Close()
@@ -160,6 +163,7 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 	if _, err = session.Insert(j); err != nil {
 		return err
 	}
+	clog.Debugf("insert a new Job: %s", jobid)
 	j.Details = make(map[string]*models.JobDetail)
 	// create details
 	pkg, err := models.GetPkg(pid, true)
@@ -172,11 +176,16 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 			JobId: jobid,
 			Fid:   f.Fid,
 		}
+		// jzh: 如果是0的文件或者文件夹,则状态就置为DONE, 因为客户端不会发送传输命令
+		if f.Size == 0 {
+			jd.State = TRANSFER_STATE_DONE
+		}
 		if _, err := session.Insert(jd); err != nil {
 			return err
 		}
 		jd.Segs = make(map[string]*models.Seg)
 		j.Details[f.Fid] = jd
+		clog.Tracef("add job detail fid:%s", f.Fid)
 	}
 	session.Commit()
 
@@ -337,6 +346,7 @@ func (self *JobManager) AddTrack(uid, pid string, typ int, mutex bool) {
 		defer self.lock.Unlock()
 	}
 
+	clog.Debugf("add track, u[%s], p[%s], t[%d]", uid, pid, typ)
 	track, _ := self.track_pkgs[pid]
 	if track == nil {
 		track = NewTrack()
@@ -457,6 +467,7 @@ func (self *JobManager) GetJobsByPid(pid string, typ int) (jobs []*models.Job, e
 
 // 从数据库中同步track信息
 func (self *JobManager) LoadTracks() error {
+	clog.Debug("load tracks")
 	jobs, err := models.GetUnFinishedJobs()
 	if err != nil {
 		return err

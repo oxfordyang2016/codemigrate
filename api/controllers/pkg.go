@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	// "fmt"
 	"github.com/astaxie/beego"
+	clog "github.com/cihub/seelog"
 	"io/ioutil"
 	"time"
 )
@@ -170,6 +171,8 @@ func (self *PkgsController) getActive() {
 	uid := self.GetString(":uid")
 	rsp := new(cydex.QueryActivePkgRsp)
 
+	clog.Debugf("query active")
+
 	defer func() {
 		self.Data["json"] = rsp
 		self.ServeJSON()
@@ -179,7 +182,9 @@ func (self *PkgsController) getActive() {
 	{
 		jobs, err := pkg.JobMgr.GetJobsByUid(uid, cydex.UPLOAD)
 		if err != nil {
-			//err
+			clog.Error("get jobs failed, u[%s] t[%d]", uid, cydex.UPLOAD)
+			rsp.Error = cydex.ErrInnerServer
+			return
 		}
 		for _, job_m := range jobs {
 			pkg_u := new(cydex.PkgUpload)
@@ -187,7 +192,9 @@ func (self *PkgsController) getActive() {
 
 			download_jobs, err := pkg.JobMgr.GetJobsByPid(pkg_u.Pid, cydex.DOWNLOAD)
 			if err != nil {
-				// err
+				clog.Error("get jobs failed, p[%s] t[%d]", pkg_u.Pid, cydex.DOWNLOAD)
+				rsp.Error = cydex.ErrInnerServer
+				return
 			}
 			if job_m.Pkg == nil {
 				// err
@@ -215,7 +222,9 @@ func (self *PkgsController) getActive() {
 	{
 		jobs, err := pkg.JobMgr.GetJobsByUid(uid, cydex.DOWNLOAD)
 		if err != nil {
-			//err
+			clog.Error("get jobs failed, u[%s] t[%d]", uid, cydex.DOWNLOAD)
+			rsp.Error = cydex.ErrInnerServer
+			return
 		}
 		for _, job_m := range jobs {
 			pkg_d := new(cydex.PkgDownload)
@@ -223,7 +232,9 @@ func (self *PkgsController) getActive() {
 
 			uploads_jobs, err := pkg.JobMgr.GetJobsByPid(pkg_d.Pid, cydex.UPLOAD)
 			if err != nil {
-				// err
+				clog.Error("get jobs failed, p[%s] t[%d]", pkg_d.Pid, cydex.UPLOAD)
+				rsp.Error = cydex.ErrInnerServer
+				return
 			}
 
 			if job_m.Pkg == nil {
@@ -259,6 +270,8 @@ func (self *PkgsController) getLitePkgs() {
 		self.ServeJSON()
 	}()
 
+	clog.Debugf("get lite pkgs query is %s", query)
+
 	var pkgs []*pkg_model.Pkg
 	var err error
 
@@ -289,6 +302,10 @@ func (self *PkgsController) getLitePkgs() {
 			}
 			pkgs = append(pkgs, j.Pkg)
 		}
+	default:
+		clog.Warnf("Invalid query:%s", query)
+		rsp.Error = cydex.ErrInvalidParam
+		return
 	}
 
 	if err != nil {

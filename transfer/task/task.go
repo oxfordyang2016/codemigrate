@@ -6,9 +6,8 @@ import (
 	"cydex/transfer"
 	"errors"
 	"fmt"
+	clog "github.com/cihub/seelog"
 	"github.com/pborman/uuid"
-	"log"
-	"os"
 	"strings"
 	"sync"
 	"time"
@@ -20,18 +19,10 @@ const (
 
 var (
 	TaskMgr *TaskManager
-	Logger  *log.Logger
 )
 
 func init() {
-	Logger = log.New(os.Stderr, "task", log.LstdFlags|log.Lshortfile)
 	TaskMgr = NewTaskManager()
-}
-
-func SetLogger(l *log.Logger) {
-	if l != nil {
-		Logger = l
-	}
 }
 
 func GenerateTaskId() string {
@@ -128,7 +119,7 @@ func NewTaskManager() *TaskManager {
 }
 
 func (self *TaskManager) SetScheduler(s TaskScheduler) {
-	Logger.Printf("Set scheduler as %s\n", s.String())
+	clog.Infof("Task Manager Set scheduler: %s\n", s.String())
 	self.scheduler = s
 }
 
@@ -161,7 +152,7 @@ func (self *TaskManager) AddTask(t *Task) {
 
 	defer func() {
 		self.lock.Unlock()
-		Logger.Printf("Add task %s\n", t)
+		clog.Infof("Add task %s", t)
 	}()
 
 	self.lock.Lock()
@@ -189,7 +180,7 @@ func (self *TaskManager) DelTask(taskid string) {
 			o.DelTask(t)
 		}
 	}
-	Logger.Printf("Del task(%s) %+v\n", taskid, t)
+	clog.Infof("Del task(%s) %+v", taskid, t)
 }
 
 func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (rsp *transfer.UploadTaskRsp, node *trans.Node, err error) {
@@ -285,7 +276,7 @@ func (self *TaskManager) OnTaskStateNotify(nid string, state *transfer.TaskState
 }
 
 func (self *TaskManager) handleTaskState(state *transfer.TaskState) (err error) {
-	Logger.Printf("TaskState: %+v\n", state)
+	clog.Debugf("TaskState: %+v\n", state)
 	t := self.GetTask(state.TaskId)
 	if t != nil {
 		t.UpdateAt = time.Now()
@@ -297,6 +288,7 @@ func (self *TaskManager) handleTaskState(state *transfer.TaskState) (err error) 
 	}
 	self.lock.Unlock()
 
+	// TODO 这里可以记录有多少的seg已经完成
 	// task有多个seg, 只有这些seg均end了,才触发DelTask~~~
 	if state.Sid == "" {
 		// sid为空说明是针对整个task的

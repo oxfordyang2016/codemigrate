@@ -6,14 +6,13 @@ import (
 	"cydex/transfer"
 	"errors"
 	"fmt"
+	clog "github.com/cihub/seelog"
 	"github.com/pborman/uuid"
 	"golang.org/x/net/websocket"
 	"net"
 	"strings"
 	"sync"
 	"time"
-	// "log"
-	// "net/http"
 )
 
 var (
@@ -80,16 +79,17 @@ func (self *NodeManager) GetByNid(id string) *Node {
 }
 
 func (self *NodeManager) AddNode(node *Node) {
+	clog.Infof("Node Add: %+v\n", node)
 	defer self.mux.Unlock()
 	self.mux.Lock()
 	self.id_map[node.Nid] = node
 	for _, o := range self.observers {
 		o.AddNode(node)
 	}
-	Logger.Printf("Add node %+v\n", node)
 }
 
 func (self *NodeManager) DelNode(nid string) {
+	clog.Infof("Node Delete: %s\n", nid)
 	defer self.mux.Unlock()
 	self.mux.Lock()
 	node, ok := self.id_map[nid]
