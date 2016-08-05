@@ -60,6 +60,17 @@ func (self *Seg) SetState(state int) error {
 	return err
 }
 
+func (self *Seg) SetStorage(storage string) error {
+	s := &Seg{
+		Storage: storage,
+	}
+	_, err := DB().Id(self.Id).Cols("storage").Update(s)
+	if err == nil {
+		self.Storage = storage
+	}
+	return err
+}
+
 func (s *Seg) TableName() string {
 	return "package_seg"
 }

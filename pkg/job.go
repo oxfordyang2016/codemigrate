@@ -70,6 +70,7 @@ func getFidFromTask(t *task.Task) (fid string) {
 // 获取运行时segs的信息, 没有就添加进runtime
 func getSegRuntime(jd *models.JobDetail, sid string) (s *models.Seg) {
 	if jd.Segs == nil {
+		clog.Trace("new segs map")
 		jd.Segs = make(map[string]*models.Seg)
 	}
 	s, _ = jd.Segs[sid]
@@ -78,18 +79,25 @@ func getSegRuntime(jd *models.JobDetail, sid string) (s *models.Seg) {
 		s.Sid = sid
 		jd.Segs[sid] = s
 	}
+	clog.Trace("seg num: ", len(jd.Segs))
 	return
 }
 
 func updateJobDetail(jd *models.JobDetail) {
 	// finished size
 	total := uint64(0)
-	for _, s := range jd.Segs {
+	finished_segs := 0
+	for sid, s := range jd.Segs {
+		clog.Tracef("%s %s %d", sid, s.Sid, s.Size)
 		total += s.Size
+		if s.State == cydex.TRANSFER_STATE_DONE {
+			finished_segs++
+		}
 	}
+	clog.Tracef("finished size: %d, finished segs:%d", total, finished_segs)
 	jd.FinishedSize = total
+	jd.NumFinishedSegs = finished_segs
 
-	// state
 	for _, s := range jd.Segs {
 		if s.State == cydex.TRANSFER_STATE_DOING {
 			jd.State = cydex.TRANSFER_STATE_DOING
@@ -164,7 +172,7 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 		return err
 	}
 	clog.Debugf("insert a new Job: %s", jobid)
-	j.Details = make(map[string]*models.JobDetail)
+	// j.Details = make(map[string]*models.JobDetail)
 	// create details
 	pkg, err := models.GetPkg(pid, true)
 	if err != nil || pkg == nil {
@@ -183,15 +191,23 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 		if _, err := session.Insert(jd); err != nil {
 			return err
 		}
-		jd.Segs = make(map[string]*models.Seg)
-		j.Details[f.Fid] = jd
-		clog.Tracef("add job detail fid:%s", f.Fid)
+		// jd.Segs = make(map[string]*models.Seg)
+		// j.Details[f.Fid] = jd
+		clog.Tracef("insert job_detail fid:%s", f.Fid)
 	}
 	session.Commit()
 
 	self.lock.Lock()
-	self.jobs[hashid] = j
+	// self.jobs[hashid] = j
+	// add track
 	self.AddTrack(uid, pid, typ, false)
+	// issue-1, 上传用户要监控下载用户状态,上传完的要加入track
+	if typ == cydex.DOWNLOAD {
+		upload_jobs, _ := models.GetJobsByPid(pid, cydex.UPLOAD)
+		for _, u_job := range upload_jobs {
+			self.AddTrack(u_job.Uid, u_job.Pid, u_job.Type, false)
+		}
+	}
 	self.lock.Unlock()
 
 	return nil
@@ -204,8 +220,8 @@ func (self *JobManager) GetJob(hashid string) *models.Job {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
-	j, ok := self.jobs[hashid]
-	if ok {
+	j, _ := self.jobs[hashid]
+	if j != nil {
 		return j
 	}
 
@@ -213,6 +229,8 @@ func (self *JobManager) GetJob(hashid string) *models.Job {
 		return nil
 	}
 	if j != nil {
+		j.Details = make(map[string]*models.JobDetail)
+		// TODO: 这里要判断是否track里的状态, 上传要监测下载, issue-1
 		if !j.Finished {
 			j.GetDetails()
 			// save to cache
@@ -235,6 +253,7 @@ func (self *JobManager) GetJobDetail(jobid, fid string) (jd *models.JobDetail) {
 		if jd, err = models.GetJobDetail(jobid, fid); err != nil {
 			return nil
 		}
+		j.Details[fid] = jd
 	}
 	return
 }
@@ -248,6 +267,9 @@ func (self *JobManager) AddTask(t *task.Task) {
 	}
 	if jd.StartTime.IsZero() {
 		jd.SetStartTime(time.Now())
+	}
+	// 上传需要更新seg storage
+	if t.Type == cydex.UPLOAD {
 	}
 
 	// jzh:不清楚是续传还是补传还是重新下载, 不好处理, api协议有缺陷
@@ -284,17 +306,16 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 	// 更新JobDetails状态, 根据判断更新Job状态, 是否finished?
 	seg_rt.Size = state.TotalBytes
 	jd.Bitrate = state.Bitrate
-	update := true
+	force_save := false
 
 	s := strings.ToLower(state.State)
 	switch s {
 	case "transferring":
 		seg_rt.State = cydex.TRANSFER_STATE_DOING
-	case "interrupt":
+	case "interrupted":
 		seg_rt.State = cydex.TRANSFER_STATE_PAUSE
 	case "end":
 		seg_rt.State = cydex.TRANSFER_STATE_DONE
-		jd.NumFinishedSegs++
 	default:
 		return
 	}
@@ -303,12 +324,16 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 
 	// jd is finished
 	if jd.NumFinishedSegs == jd.File.NumSegs {
-		jd.Finish()
-		update = false
+		clog.Tracef("%s is finished", jd)
+		jd.State = cydex.TRANSFER_STATE_DONE
+		jd.FinishTime = time.Now()
+		force_save = true
 		j.NumFinishedDetails++
 	}
 
+	// job is finished?
 	if j.NumFinishedDetails == int(j.Pkg.NumFiles) {
+		clog.Tracef("%s is finished", j)
 		j.Finish()
 		self.lock.Lock()
 		delete(self.jobs, j.JobId) // 从表里删除
@@ -319,12 +344,14 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 	//jzh: 将上传seg的发生变化的状态更新进数据库
 	if typ == cydex.UPLOAD {
 		seg_m, _ := models.GetSeg(sid)
+		clog.Tracef("sid:%s model_s:%d runtime_s:%d", sid, seg_m.State, seg_rt.State)
 		if seg_m != nil && seg_m.State != seg_rt.State {
+			clog.Trace(sid, "set state ", seg_rt.State)
 			seg_m.SetState(seg_rt.State)
 		}
 	}
 
-	if update && time.Since(jd.UpdateAt) >= self.cache_sync_timeout {
+	if force_save || time.Since(jd.UpdateAt) >= self.cache_sync_timeout {
 		jd.Save()
 	}
 }
@@ -370,12 +397,38 @@ func (self *JobManager) AddTrack(uid, pid string, typ int, mutex bool) {
 	}
 }
 
+// 删除track, issues-1, 上传用户要等下载完成后才能删除
 func (self *JobManager) DelTrack(uid, pid string, typ int, mutex bool) {
 	if mutex {
 		self.lock.Lock()
 		defer self.lock.Unlock()
 	}
 
+	if typ == cydex.UPLOAD {
+		track, _ := self.track_pkgs[pid]
+		if track != nil {
+			// 如果还有下载则不退出
+			if len(track.Downloads) > 0 {
+				return
+			}
+		}
+	}
+
+	self.delTrack(uid, pid, typ)
+
+	// 如果上传的pid, 无下载用户了,需要删除
+	track, _ := self.track_pkgs[pid]
+	if track != nil {
+		if len(track.Downloads) == 0 {
+			for uid, _ := range track.Uploads {
+				self.delTrack(uid, pid, cydex.UPLOAD)
+			}
+		}
+	}
+}
+
+func (self *JobManager) delTrack(uid, pid string, typ int) {
+	clog.Debugf("del track, u[%s], p[%s], t[%d]", uid, pid, typ)
 	track, _ := self.track_pkgs[pid]
 	if track != nil {
 		if typ == cydex.UPLOAD {
@@ -478,6 +531,13 @@ func (self *JobManager) LoadTracks() error {
 	self.ClearTracks(false)
 	for _, j := range jobs {
 		self.AddTrack(j.Uid, j.Pid, j.Type, false)
+		// issue-1, 上传用户要监控下载用户状态,上传完的要加入track
+		if j.Type == cydex.DOWNLOAD {
+			upload_jobs, _ := models.GetJobsByPid(j.Pid, cydex.UPLOAD)
+			for _, u_job := range upload_jobs {
+				self.AddTrack(u_job.Uid, u_job.Pid, u_job.Type, false)
+			}
+		}
 	}
 	return nil
 }

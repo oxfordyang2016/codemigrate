@@ -3,6 +3,7 @@ package task
 import (
 	trans "./.."
 	"fmt"
+	clog "github.com/cihub/seelog"
 	URL "net/url"
 	"strings"
 )
@@ -46,11 +47,12 @@ func NewDefaultScheduler() *DefaultScheduler {
 }
 
 func (self *DefaultScheduler) String() string {
-	return "default scheduler"
+	return "Default Scheduler"
 }
 
 func (self *DefaultScheduler) DispatchUpload(req *UploadReq) (n *trans.Node, err error) {
 	// 首先使用约束调度器, 如果没有找到,则再使用具体的上传调度器进行分配
+	clog.Tracef("%s: dispatch upload", self)
 	n, err = self.u_restrict.DispatchUpload(req)
 	if err != nil {
 		// log
@@ -66,15 +68,28 @@ func (self *DefaultScheduler) DispatchUpload(req *UploadReq) (n *trans.Node, err
 }
 
 func (self *DefaultScheduler) DispatchDownload(req *DownloadReq) (n *trans.Node, err error) {
-	// FIXME 目前只能处理1个sid
+	clog.Trace("dispatch download")
+	// NOTE: 客户端一次请求一个file的所有seg,上传也是, 所以这些seg的分段存在一个Node上
+	// 这里判断storage是否是一个nodeid上?
+
+	// var url *URL.URL
+	// for _, storage := range req.SidStorage {
+	// 	if url, err = URL.Parse(sid_storage); err != nil {
+	// 		return nil, err
+	// 	}
+	// }
+	// 取第一个即可
 	sid_storage := req.SidStorage[0]
+	clog.Trace(sid_storage)
 	var url *URL.URL
 	if url, err = URL.Parse(sid_storage); err != nil {
 		return nil, err
 	}
 	scheme := strings.ToLower(url.Scheme)
+	clog.Trace(scheme)
 	switch scheme {
 	case "file":
+		req.meta = url
 		n, err = self.d_file.DispatchDownload(req)
 	case "nas":
 		n, err = self.d_nas.DispatchDownload(req)

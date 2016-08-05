@@ -12,8 +12,9 @@ type File struct {
 	Path       string `xorm:"varchar(128) notnull"`
 	Type       int    `xorm:"Int notnull default(1)"`
 	Size       uint64 `xorm:"BigInt notnull"`
+	Mode       int    `xorm:'Int default(0)'`
 	EigenValue string `xorm:"varchar(80)"`
-	PathAbs    string `xorm:"varchar(128)"`
+	PathAbs    string `xorm:"varchar(255)"`
 	NumSegs    int    `xorm:"not null"`
 	// ServerPath string    `xorm:"varchar(30)"`
 	CreateAt  time.Time `xorm:"DateTime created"`
@@ -56,9 +57,10 @@ func GetFiles(pid string, with_seg bool) ([]*File, error) {
 		return nil, err
 	}
 	if with_seg {
-		//TODO
 		for _, f := range files {
-			f = f
+			if err := f.GetSegs(); err != nil {
+				return nil, err
+			}
 		}
 	}
 	return files, nil

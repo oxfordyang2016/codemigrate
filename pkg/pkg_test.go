@@ -64,7 +64,7 @@ func Test_DefaultUnpacker(t *testing.T) {
 					}
 					segs, err = U.GenerateSegs("ffff", f)
 					So(len(segs), ShouldEqual, 1)
-					So(segs[0].InnerSize, ShouldEqual, 128*1024)
+					So(segs[0].Size, ShouldEqual, 128*1024)
 					So(segs[0].Sid, ShouldEqual, "ffff00000000")
 					So(err, ShouldBeNil)
 				})
@@ -75,7 +75,7 @@ func Test_DefaultUnpacker(t *testing.T) {
 					}
 					segs, err = U.GenerateSegs("ffff", f)
 					So(len(segs), ShouldEqual, 6)
-					So(segs[5].InnerSize, ShouldEqual, 50*1024*1024)
+					So(segs[5].Size, ShouldEqual, 50*1024*1024)
 					So(segs[5].Sid, ShouldEqual, "ffff00000005")
 					So(err, ShouldBeNil)
 				})
@@ -86,7 +86,7 @@ func Test_DefaultUnpacker(t *testing.T) {
 					}
 					segs, err = U.GenerateSegs("ffff", f)
 					So(len(segs), ShouldEqual, 25)
-					So(segs[24].InnerSize, ShouldEqual, 50*1024*1024)
+					So(segs[24].Size, ShouldEqual, 50*1024*1024)
 					So(segs[24].Sid, ShouldEqual, "ffff00000024")
 					So(err, ShouldBeNil)
 				})

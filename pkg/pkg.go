@@ -73,10 +73,9 @@ func (self *DefaultUnpacker) GenerateSegs(fid string, f *cydex.SimpleFile) ([]*c
 			size = total_size
 		}
 		seg := &cydex.Seg{
-			Sid:       fmt.Sprintf("%s%08d", fid, idx),
-			Size:      fmt.Sprintf("%d", size),
-			InnerSize: size,
+			Sid: fmt.Sprintf("%s%08d", fid, idx),
 		}
+		seg.SetSize(size)
 		segs = append(segs, seg)
 		total_size -= size
 	}

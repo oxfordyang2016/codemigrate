@@ -107,6 +107,9 @@ func (self *RestrictUploadScheduler) DelTask(t *Task) {
 }
 
 func (self *RestrictUploadScheduler) TaskStateNotify(t *Task, state *transfer.TaskState) {
+	if t == nil {
+		return
+	}
 	if t.Type != cydex.UPLOAD || t.UploadReq == nil {
 		return
 	}
@@ -114,8 +117,8 @@ func (self *RestrictUploadScheduler) TaskStateNotify(t *Task, state *transfer.Ta
 	defer self.lock.Unlock()
 	self.lock.Lock()
 
-	xid := self.getId(t.UploadReq)
-	self.resource.Update(xid, t.Node)
+	// xid := self.getId(t.UploadReq)
+	// self.resource.Update(xid, t.Node)
 }
 
 type Resource struct {

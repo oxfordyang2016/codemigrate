@@ -5,7 +5,9 @@ import (
 	"./db"
 	"./pkg"
 	pkg_model "./pkg/models"
+	trans "./transfer"
 	trans_model "./transfer/models"
+	"./transfer/task"
 	"github.com/astaxie/beego"
 	clog "github.com/cihub/seelog"
 )
@@ -26,10 +28,14 @@ func initLog() {
 	}
 }
 
+// const DB = ":memory:"
+
+const DB = "/tmp/cydex.sqlite3"
+
 func initDB() (err error) {
 	// 创建数据库
 	clog.Info("init db")
-	if err = db.CreateEngine("sqlite3", "/tmp/cydex.sqlite3", false); err != nil {
+	if err = db.CreateEngine("sqlite3", DB, false); err != nil {
 		return
 	}
 	// 同步表结构
@@ -53,10 +59,23 @@ func start() {
 	pkg.SetUnpacker(pkg.NewDefaultUnpacker(50*1024*1024, 25))
 	// 从数据库导入track
 	pkg.JobMgr.LoadTracks()
+	// set scheduler
+	task.TaskMgr.SetScheduler(task.NewDefaultScheduler())
+	// listen task state
+	task.TaskMgr.ListenTaskState()
+	// add job listen
+	task.TaskMgr.AddObserver(pkg.JobMgr)
+}
+
+func run_ws() {
+	ws_service := trans.NewWSServer("/ts", 12345, nil)
+	ws_service.SetVersion("1.0.0")
+	ws_service.Serve()
 }
 
 func main() {
 	start()
 	clog.Info("start")
+	go run_ws()
 	beego.Run(":8088")
 }

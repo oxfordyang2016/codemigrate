@@ -8,7 +8,6 @@ import (
 	"fmt"
 	clog "github.com/cihub/seelog"
 	"github.com/pborman/uuid"
-	"strings"
 	"sync"
 	"time"
 )
@@ -55,6 +54,7 @@ type DownloadReq struct {
 	*transfer.DownloadTaskReq
 	Pid             string
 	FinishedSidList []string //已经下完的片段
+	meta            interface{}
 }
 
 func NewDownloadReq(r *transfer.DownloadTaskReq, pid string, finished_sid_list []string) (req *DownloadReq, err error) {
@@ -70,20 +70,63 @@ func NewDownloadReq(r *transfer.DownloadTaskReq, pid string, finished_sid_list [
 }
 
 type Task struct {
-	TaskId      string             // 任务ID
-	Type        int                // 类型, U or D
-	State       transfer.TaskState // 任务状态
-	Node        *trans.Node        // 该任务分配的传输节点
+	TaskId      string // 任务ID
+	Type        int    // 类型, U or D
 	UploadReq   *UploadReq
 	DownloadReq *DownloadReq
 	Fid         string
-	SidList     []string
+	SegsState   map[string]*transfer.TaskState
 	CreateAt    time.Time
 	UpdateAt    time.Time
+	Node        *trans.Node // 该任务分配的传输节点
+}
+
+func NewTask(msg *transfer.Message) *Task {
+	t := new(Task)
+	t.CreateAt = time.Now()
+	t.UpdateAt = time.Now()
+	t.SegsState = make(map[string]*transfer.TaskState)
+
+	var sid_list []string
+
+	if msg.Cmd == "uploadtask" {
+		req := msg.Req.UploadTask
+		t.TaskId = req.TaskId
+		t.Fid = req.Fid
+		t.Type = cydex.UPLOAD
+		sid_list = req.SidList
+	} else {
+		req := msg.Req.DownloadTask
+		t.TaskId = req.TaskId
+		t.Fid = req.Fid
+		t.Type = cydex.DOWNLOAD
+		sid_list = req.SidList
+	}
+
+	for _, sid := range sid_list {
+		t.SegsState[sid] = &transfer.TaskState{
+			TaskId: t.TaskId,
+			Sid:    sid,
+		}
+	}
+	return t
 }
 
 func (self *Task) IsDispatched() bool {
 	return self.Node != nil
+}
+
+func (self *Task) IsOver() bool {
+	finished_segs := 0
+	for _, state := range self.SegsState {
+		if state.State == "interrupted" || state.State == "end" {
+			finished_segs++
+		}
+	}
+	if finished_segs == len(self.SegsState) {
+		return true
+	}
+	return false
 }
 
 func (self *Task) String() string {
@@ -96,30 +139,30 @@ func (self *Task) String() string {
 	default:
 		s = "?"
 	}
-	return fmt.Sprintf("<Task(%s %s)>", self.TaskId, s)
+	return fmt.Sprintf("<Task(%s %s %d)>", self.TaskId[:8], s, len(self.SegsState))
 }
 
 // 任务管理器
 type TaskManager struct {
-	scheduler              TaskScheduler
-	lock                   sync.Mutex
-	tasks                  map[string]*Task // task_id -> node
-	observer_idx           uint32
-	observers              map[uint32]TaskObserver
-	task_state_routine_run bool
-	task_state_chan        chan *transfer.TaskState
+	scheduler    TaskScheduler
+	lock         sync.Mutex
+	tasks        map[string]*Task // task_id -> node
+	observer_idx uint32
+	observers    map[uint32]TaskObserver
+	// task_state_routine_run bool
+	// task_state_chan        chan *transfer.TaskState
 }
 
 func NewTaskManager() *TaskManager {
 	t := new(TaskManager)
 	t.tasks = make(map[string]*Task)
 	t.observers = make(map[uint32]TaskObserver)
-	t.task_state_chan = make(chan *transfer.TaskState, 10)
+	// t.task_state_chan = make(chan *transfer.TaskState, 10)
 	return t
 }
 
 func (self *TaskManager) SetScheduler(s TaskScheduler) {
-	clog.Infof("Task Manager Set scheduler: %s\n", s.String())
+	clog.Infof("Task Manager Set scheduler: %s", s.String())
 	self.scheduler = s
 }
 
@@ -197,7 +240,7 @@ func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (
 		return
 	}
 	if node == nil {
-		// Log
+		err = errors.New("Scheduler didn't find suitable node!")
 		return
 	}
 
@@ -206,21 +249,14 @@ func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (
 	msg.Req.UploadTask = req.UploadTaskReq
 	if rsp_msg, err = node.SendRequestSync(msg, timeout); err != nil {
 		// log
+		clog.Warnf("%s send upload task failed, err:%s", node, err)
 		return
 	}
 	// TODO 判断rsp_msg的Code值
 	rsp = rsp_msg.Rsp.UploadTask
 
-	t := &Task{
-		TaskId:    req.TaskId,
-		Type:      cydex.UPLOAD,
-		Node:      node,
-		UploadReq: req,
-		CreateAt:  time.Now(),
-		UpdateAt:  time.Now(),
-		Fid:       req.UploadTaskReq.Fid,
-		SidList:   req.UploadTaskReq.SidList,
-	}
+	t := NewTask(msg)
+	t.UploadReq = req
 	TaskMgr.AddTask(t)
 	return
 }
@@ -252,34 +288,42 @@ func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duratio
 	}
 	rsp = rsp_msg.Rsp.DownloadTask
 
-	t := &Task{
-		TaskId:      req.TaskId,
-		Type:        cydex.DOWNLOAD,
-		Node:        node,
-		DownloadReq: req,
-		CreateAt:    time.Now(),
-		UpdateAt:    time.Now(),
-		Fid:         req.DownloadTaskReq.Fid,
-		SidList:     req.DownloadTaskReq.SidList,
-	}
+	t := NewTask(msg)
+	t.DownloadReq = req
+	// t := &Task{
+	// 	TaskId:      req.TaskId,
+	// 	Type:        cydex.DOWNLOAD,
+	// 	Node:        node,
+	// 	DownloadReq: req,
+	// 	CreateAt:    time.Now(),
+	// 	UpdateAt:    time.Now(),
+	// 	Fid:         req.DownloadTaskReq.Fid,
+	// 	SegsState:   make(map[string]*transfer.TaskState),
+	// }
 	TaskMgr.AddTask(t)
 	return
 }
 
-func (self *TaskManager) OnTaskStateNotify(nid string, state *transfer.TaskState) (err error) {
-	if !self.task_state_routine_run {
-		self.task_state_routine_run = true
-		go self.taskStateThread()
-	}
-	self.task_state_chan <- state
-	return
-}
+// func (self *TaskManager) OnTaskStateNotify(nid string, state *transfer.TaskState) (err error) {
+// 	if !self.task_state_routine_run {
+// 		self.task_state_routine_run = true
+// 	}
+// 	self.task_state_chan <- state
+// 	return
+// }
 
 func (self *TaskManager) handleTaskState(state *transfer.TaskState) (err error) {
-	clog.Debugf("TaskState: %+v\n", state)
+	// clog.Tracef("TaskState: %+v", state)
 	t := self.GetTask(state.TaskId)
+	clog.Trace(t)
 	if t != nil {
 		t.UpdateAt = time.Now()
+		s := t.SegsState[state.Sid]
+		if s != nil {
+			s.State = state.State
+			s.TotalBytes = state.TotalBytes
+			s.Bitrate = state.Bitrate
+		}
 	}
 
 	self.lock.Lock()
@@ -288,20 +332,21 @@ func (self *TaskManager) handleTaskState(state *transfer.TaskState) (err error) 
 	}
 	self.lock.Unlock()
 
-	// TODO 这里可以记录有多少的seg已经完成
-	// task有多个seg, 只有这些seg均end了,才触发DelTask~~~
-	if state.Sid == "" {
-		// sid为空说明是针对整个task的
-		s := strings.ToLower(state.State)
-		if s == "end" {
+	if t != nil {
+		if t.IsOver() {
+			clog.Tracef("%s is over", t)
 			self.DelTask(state.TaskId)
 		}
 	}
 	return
 }
 
-func (self *TaskManager) taskStateThread() {
-	for state := range self.task_state_chan {
-		self.handleTaskState(state)
-	}
+func (self *TaskManager) ListenTaskState() {
+	go func() {
+		for states := range trans.NodeMgr.StateChan {
+			for _, state := range states {
+				self.handleTaskState(state)
+			}
+		}
+	}()
 }

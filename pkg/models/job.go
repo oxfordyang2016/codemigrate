@@ -3,6 +3,7 @@ package models
 import (
 	"cydex"
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -153,6 +154,10 @@ func (self *Job) GetPkg(with_files bool) (err error) {
 	return
 }
 
+func (self *Job) String() string {
+	return fmt.Sprintf("<Job(%s)", self.JobId)
+}
+
 type JobDetail struct {
 	Id              uint64    `xorm:"pk autoincr"`
 	JobId           string    `xorm:"not null"`
@@ -276,4 +281,8 @@ func (self *JobDetail) Save() error {
 
 func (self *JobDetail) TableName() string {
 	return "package_job_detail"
+}
+
+func (self *JobDetail) String() string {
+	return fmt.Sprintf("<JobDetail(%s:%s)", self.JobId, self.Fid)
 }

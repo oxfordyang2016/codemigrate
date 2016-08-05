@@ -52,15 +52,16 @@ type NodeObserver interface {
 
 // TransferNode管理
 type NodeManager struct {
-	mux            sync.Mutex
-	id_map         map[string]*Node // id->node
-	observers      []NodeObserver
-	task_notify_cb TaskStateNotifyCallback
+	StateChan chan []*transfer.TaskState
+	mux       sync.Mutex
+	id_map    map[string]*Node // id->node
+	observers []NodeObserver
 }
 
 func NewNodeManager() *NodeManager {
 	nm := new(NodeManager)
 	nm.id_map = make(map[string]*Node)
+	nm.StateChan = make(chan []*transfer.TaskState)
 	return nm
 }
 
@@ -108,10 +109,6 @@ func (self *NodeManager) AddObserver(observer NodeObserver) {
 	defer self.mux.Unlock()
 	self.mux.Lock()
 	self.observers = append(self.observers, observer)
-}
-
-func (self *NodeManager) RegisterTaskStateNotify(cb TaskStateNotifyCallback) {
-	self.task_notify_cb = cb
 }
 
 type NodeInfo struct {
@@ -334,13 +331,10 @@ func (self *Node) handleTransferNotify(msg, rsp *transfer.Message) (err error) {
 		return
 	}
 
-	if msg.Req.TransferNotify.TaskStateList != nil && NodeMgr.task_notify_cb != nil {
-		for _, r := range msg.Req.TransferNotify.TaskStateList {
-			if err = NodeMgr.task_notify_cb(self.Nid, r); err != nil {
-				return
-			}
-		}
-	}
+	NodeMgr.StateChan <- msg.Req.TransferNotify.TaskStateList
+	// for _, r := range msg.Req.TransferNotify.TaskStateList {
+	// 	NodeMgr.StateChan <- r
+	// }
 
 	return
 }
@@ -398,7 +392,11 @@ func (self *Node) Close(close_conn bool) {
 }
 
 func (self *Node) String() string {
-	return fmt.Sprintf("<Node(%s %s)>", self.Nid, self.Host)
+	nid := ""
+	if self.Node != nil {
+		nid = self.Node.Nid
+	}
+	return fmt.Sprintf("<Node(%s %s)>", nid, self.Host)
 }
 
 func (self *Node) OnlineDuration() time.Duration {
