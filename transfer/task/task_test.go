@@ -40,6 +40,9 @@ func Test_TaskManager(t *testing.T) {
 			TaskMgr.DelTask("t0")
 			So(fo.cnt, ShouldEqual, 0)
 
+			So(t1.Node, ShouldBeNil)
+			So(t1.IsDispatched(), ShouldBeFalse)
+
 			Convey("handle task state", func() {
 				state := &transfer.TaskState{
 					TaskId:     "t0",

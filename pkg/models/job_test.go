@@ -3,6 +3,7 @@ package models
 import (
 	"./../../db"
 	"cydex"
+	"fmt"
 	. "github.com/smartystreets/goconvey/convey"
 	"os"
 	"testing"
@@ -61,5 +62,30 @@ func Test_JobDetail(t *testing.T) {
 			err = jd.Save()
 			So(jd.UpdateAt.Sub(jd.CreateAt), ShouldBeGreaterThanOrEqualTo, 1*time.Second)
 		})
+	})
+}
+
+func Test_DeleteJob(t *testing.T) {
+	j, _ := CreateJob("aaa", "u1", "p1", cydex.DOWNLOAD)
+	for i := 0; i < 2; i++ {
+		CreateJobDetail(j.JobId, fmt.Sprintf("fid_%d", i))
+	}
+	j, _ = CreateJob("bbb", "u2", "p2", cydex.DOWNLOAD)
+	for i := 0; i < 3; i++ {
+		CreateJobDetail(j.JobId, fmt.Sprintf("fid_%d", i))
+	}
+
+	Convey("test delete", t, func() {
+		DeleteJob("aaa")
+		j, _ := GetJob("aaa", false)
+		So(j, ShouldBeNil)
+		j, _ = GetJob("bbb", false)
+		So(j, ShouldNotBeNil)
+
+		jds, _ := GetJobDetails("bbb")
+		So(jds, ShouldHaveLength, 3)
+
+		jds, _ = GetJobDetails("aaa")
+		So(jds, ShouldHaveLength, 0)
 	})
 }

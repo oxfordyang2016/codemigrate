@@ -6,6 +6,7 @@ import (
 	"cydex"
 	"encoding/json"
 	// "fmt"
+	"./../../transfer/task"
 	"errors"
 	"github.com/astaxie/beego"
 	clog "github.com/cihub/seelog"
@@ -16,6 +17,8 @@ import (
 
 func fillTransferState(state *cydex.TransferState, uid string, size uint64, jd *pkg_model.JobDetail) {
 	state.Uid = uid
+	// FIXME
+	state.Username = "receiver"
 	state.State = jd.State
 	if size > 0 {
 		state.Percent = int(jd.FinishedSize * 100 / size)
@@ -36,6 +39,9 @@ func fillTransferState(state *cydex.TransferState, uid string, size uint64, jd *
 
 // 根据model里的pkg,得到消息响应
 func aggregate(pkg_m *pkg_model.Pkg) (pkg_c *cydex.Pkg, err error) {
+	if pkg_m == nil {
+		return nil, errors.New("nil pkg model")
+	}
 	clog.Trace(pkg_m.Pid)
 	pkg_c = new(cydex.Pkg)
 
@@ -98,6 +104,8 @@ func aggregate(pkg_m *pkg_model.Pkg) (pkg_c *cydex.Pkg, err error) {
 			file.UploadState = append(file.UploadState, state)
 		}
 
+		//jzh: 每次都要从数据库里取
+		file_m.GetSegs()
 		for _, seg_m := range file_m.Segs {
 			seg := new(cydex.Seg)
 			seg.Sid = seg_m.Sid
@@ -116,8 +124,6 @@ func aggregate(pkg_m *pkg_model.Pkg) (pkg_c *cydex.Pkg, err error) {
 
 		pkg_c.Files = append(pkg_c.Files, file)
 	}
-
-	clog.Trace("kkkkkkkkkkkk, over")
 
 	return
 }
@@ -190,76 +196,6 @@ func (self *PkgsController) getJobs(typ int) {
 			rsp.Error = cydex.ErrInnerServer
 			return
 		}
-		// pkg_c := new(cydex.Pkg)
-		//
-		// pkg_m := job.Pkg
-		// pkg_c.Pid = pkg_m.Pid
-		// pkg_c.Title = pkg_m.Title
-		// pkg_c.Notes = pkg_m.Notes
-		// pkg_c.NumFiles = int(pkg_m.NumFiles)
-		// pkg_c.Date = pkg_m.CreateAt
-		// pkg_c.EncryptionType = pkg_m.EncryptionType
-		//
-		// // 根据pid获取下载该pkg的信息
-		// download_jobs, err := pkg_model.GetJobsByPid(job.Pid, cydex.DOWNLOAD)
-		// if err != nil {
-		// 	// error
-		// 	rsp.Error = cydex.ErrInnerServer
-		// 	return
-		// }
-		// // 根据pid获取上传该pkg的信息
-		// upload_jobs, err := pkg_model.GetJobsByPid(job.Pid, cydex.UPLOAD)
-		// if err != nil {
-		// 	// error
-		// 	rsp.Error = cydex.ErrInnerServer
-		// }
-		//
-		// for _, file_m := range pkg_m.Files {
-		// 	file := new(cydex.File)
-		// 	file.Fid = file_m.Fid
-		// 	file.Filename = file_m.Name
-		// 	file.Path = file_m.Path
-		// 	file.Type = file_m.Type
-		// 	file.Chara = file_m.EigenValue
-		// 	file.PathAbs = file_m.PathAbs
-		// 	file.Mode = file_m.Mode
-		// 	file.SetSize(file_m.Size)
-		//
-		// 	// 获取该文件的关联信息
-		// 	for _, d_job := range download_jobs {
-		// 		// 使用cache中的jd值,cache里没有则使用数据库的, 通过JobMgr接口
-		// 		jd := pkg.JobMgr.GetJobDetail(d_job.JobId, file.Fid)
-		// 		if jd == nil {
-		// 			// error
-		// 			rsp.Error = cydex.ErrInnerServer
-		// 			return
-		// 		}
-		// 		state := new(cydex.TransferState)
-		// 		fillTransferState(state, d_job.Uid, file_m.Size, jd)
-		// 		file.DownloadState = append(file.DownloadState, state)
-		// 	}
-		//
-		// 	for _, u_job := range upload_jobs {
-		// 		// 使用cache中的jd值,cache里没有则使用数据库的, 通过JobMgr接口
-		// 		jd := pkg.JobMgr.GetJobDetail(u_job.JobId, file.Fid)
-		// 		if jd == nil {
-		// 			// error
-		// 			rsp.Error = cydex.ErrInnerServer
-		// 			return
-		// 		}
-		// 		state := new(cydex.TransferState)
-		// 		fillTransferState(state, u_job.Uid, file_m.Size, jd)
-		// 		file.UploadState = append(file.UploadState, state)
-		// 	}
-		//
-		// 	for _, seg_m := range file_m.Segs {
-		// 		seg := new(cydex.Seg)
-		// 		seg.Sid = seg_m.Sid
-		// 		seg.SetSize(seg_m.Size)
-		// 		seg.Status = seg_m.State
-		// 		file.Segs = append(file.Segs, seg)
-		// 	}
-		// 	pkg_c.Files = append(pkg_c.Files, file)
 
 		rsp.Pkgs = append(rsp.Pkgs, pkg_c)
 	}
@@ -373,6 +309,18 @@ func (self *PkgsController) getActive() {
 			}
 			rsp.Downloads = append(rsp.Downloads, pkg_d)
 		}
+	}
+
+	//delete_sender_pkg_list
+	pids := pkg.JobMgr.GetTrackOfDelete(uid, cydex.UPLOAD, true, true)
+	for _, pid := range pids {
+		rsp.DelSenderPkgs = append(rsp.DelSenderPkgs, &cydex.PkgId{pid})
+	}
+
+	//delete_receive_pkg_list
+	pids = pkg.JobMgr.GetTrackOfDelete(uid, cydex.DOWNLOAD, true, true)
+	for _, pid := range pids {
+		rsp.DelReceiverPkgs = append(rsp.DelReceiverPkgs, &cydex.PkgId{pid})
 	}
 }
 
@@ -626,111 +574,101 @@ func (self *PkgController) Get() {
 		job, err := pkg_model.GetJob(hashid, true)
 		if err == nil && job != nil {
 			rsp.Pkg, _ = aggregate(job.Pkg)
-			break
+		}
+	}
+}
+
+// 3.7.2
+func (self *PkgController) Put() {
+	uid := self.GetString(":uid")
+	pid := self.GetString(":pid")
+
+	req := new(cydex.ModifyPkgReq)
+	rsp := new(cydex.ModifyPkgRsp)
+
+	defer func() {
+		self.Data["json"] = rsp
+		self.ServeJSON()
+	}()
+
+	// 获取请求
+	r := self.Ctx.Request
+	defer r.Body.Close()
+	body, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		rsp.Error = cydex.ErrInvalidParam
+		return
+	}
+	clog.Debug(string(body))
+	if err := json.Unmarshal(body, req); err != nil {
+		clog.Error(err)
+		rsp.Error = cydex.ErrInvalidParam
+		return
+	}
+
+	hashid := pkg.HashJob(uid, pid, cydex.UPLOAD)
+	job_m, err := pkg_model.GetJob(hashid, false)
+	clog.Tracef("%+v", job_m)
+	if err != nil {
+		clog.Error(err)
+		rsp.Error = cydex.ErrInvalidParam
+		return
+	}
+	if job_m == nil {
+		rsp.Error = cydex.ErrPackageNotExisted
+		return
+	}
+	job_m.GetPkg(true)
+
+	// add
+	for _, uid := range req.AddList {
+		if err := pkg.JobMgr.CreateJob(uid, pid, cydex.DOWNLOAD); err != nil {
+			clog.Error(err)
 		}
 	}
 
-	// hashid := pkg.HashJob(uid, pid, cydex.UPLOAD)
-	// job, err := pkg_model.GetJob(hashid, true)
-	// if err != nil || job == nil {
-	// 	hashid := pkg.HashJob(uid, pid, cydex.DOWNLOAD)
-	// 	job, err := pkg_model.GetJob(hashid, true)
-	// }
-	// 	rsp.Pkg, err = aggregate(job.Pkg)
-	// 	rsp.Error = cydex.ErrPackageNotExisted
-	// 	return
-	// }
-	//
-	// pkg_c := new(cydex.Pkg)
-	// pkg_m := job.Pkg
-	//
-	// pkg_c.Pid = pkg_m.Pid
-	// pkg_c.Title = pkg_m.Title
-	// pkg_c.Notes = pkg_m.Notes
-	// pkg_c.NumFiles = int(pkg_m.NumFiles)
-	// pkg_c.Date = pkg_m.CreateAt
-	// pkg_c.EncryptionType = pkg_m.EncryptionType
-	// pkg_c.MetaData = pkg_m.MetaData
-	//
-	// if err = pkg_m.GetFiles(true); err != nil {
-	// 	// error
-	// 	rsp.Error = cydex.ErrInnerServer
-	// 	return
-	// }
-	//
-	// // 根据pid获取下载该pkg的信息
-	// download_jobs, err := pkg_model.GetJobsByPid(job.Pid, cydex.DOWNLOAD)
-	// if err != nil {
-	// 	clog.Error(err)
-	// 	rsp.Error = cydex.ErrInnerServer
-	// 	return
-	// }
-	// upload_jobs, err := pkg_model.GetJobsByPid(job.Pid, cydex.UPLOAD)
-	// if err != nil {
-	// 	clog.Error(err)
-	// 	rsp.Error = cydex.ErrInnerServer
-	// 	return
-	// }
-	//
-	// for _, file_m := range pkg_m.Files {
-	// 	file := new(cydex.File)
-	// 	file.Fid = file_m.Fid
-	// 	file.Filename = file_m.Name
-	// 	file.Path = file_m.Path
-	// 	file.Type = file_m.Type
-	// 	// file.Chara = file_m.EigenValue
-	// 	//fake
-	// 	file.Chara = "NULL"
-	// 	file.PathAbs = file_m.PathAbs
-	// 	file.Mode = file_m.Mode
-	// 	file.SetSize(file_m.Size)
-	//
-	// 	// 获取该文件的关联信息
-	// 	for _, d_job := range download_jobs {
-	// 		jd := pkg.JobMgr.GetJobDetail(d_job.JobId, file.Fid)
-	// 		if jd == nil {
-	// 			// error
-	// 			rsp.Error = cydex.ErrInnerServer
-	// 			return
-	// 		}
-	// 		state := new(cydex.TransferState)
-	// 		fillTransferState(state, d_job.Uid, file_m.Size, jd)
-	// 		file.DownloadState = append(file.DownloadState, state)
-	// 	}
-	// 	// 获取文件上传信息
-	// 	for _, u_job := range upload_jobs {
-	// 		// 使用cache中的jd值,cache里没有则使用数据库的, 通过JobMgr接口
-	// 		jd := pkg.JobMgr.GetJobDetail(u_job.JobId, file.Fid)
-	// 		if jd == nil {
-	// 			// error
-	// 			rsp.Error = cydex.ErrInnerServer
-	// 			return
-	// 		}
-	// 		state := new(cydex.TransferState)
-	// 		fillTransferState(state, u_job.Uid, file_m.Size, jd)
-	// 		file.UploadState = append(file.UploadState, state)
-	// 	}
-	//
-	// 	clog.Trace(file_m.Segs)
-	//
-	// 	for _, seg_m := range file_m.Segs {
-	// 		seg := new(cydex.Seg)
-	// 		seg.Sid = seg_m.Sid
-	// 		seg.SetSize(seg_m.Size)
-	// 		seg.Status = seg_m.State
-	// 		file.Segs = append(file.Segs, seg)
-	// 	}
-	//
-	// 	if file.DownloadState == nil {
-	// 		file.DownloadState = make([]*cydex.TransferState, 0)
-	// 	}
-	// 	if file.UploadState == nil {
-	// 		file.UploadState = make([]*cydex.TransferState, 0)
-	// 	}
-	//
-	// 	pkg_c.Files = append(pkg_c.Files, file)
-	// }
-	// rsp.Pkg = pkg_c
+	// delete
+	for _, uid := range req.RemoveList {
+		// stop transferring tasks
+		clog.Trace("remove:", uid, pid)
+		task.TaskMgr.StopTasks(uid, pid, cydex.DOWNLOAD)
+
+		// delete resource in cache and db
+		if err := pkg.JobMgr.DeleteJob(uid, pid, cydex.DOWNLOAD); err != nil {
+			clog.Error(err)
+			continue
+		}
+	}
+
+	rsp.Pkg, _ = aggregate(job_m.Pkg)
+}
+
+// TODO 删除包裹
+func (self *PkgController) Delete() {
+	uid := self.GetString(":uid")
+	pid := self.GetString(":pid")
+
+	rsp := new(cydex.BaseRsp)
+
+	defer func() {
+		self.Data["json"] = rsp
+		self.ServeJSON()
+	}()
+
+	hashid := pkg.HashJob(uid, pid, cydex.UPLOAD)
+	job_m, _ := pkg_model.GetJob(hashid, true)
+	if job_m == nil || job_m.Pkg == nil {
+		rsp.Error = cydex.ErrPackageNotExisted
+		return
+	}
+	upload_jobs, _ := pkg.JobMgr.GetJobsByPid(pid, cydex.UPLOAD)
+	download_jobs, _ := pkg.JobMgr.GetJobsByPid(pid, cydex.DOWNLOAD)
+	if upload_jobs != nil || download_jobs != nil {
+		rsp.Error = cydex.ErrActivePackage
+		return
+	}
+
+	// TODO 删除文件, 释放空间
 }
 
 // 单文件控制器

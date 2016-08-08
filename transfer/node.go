@@ -23,10 +23,6 @@ func init() {
 	NodeMgr = NewNodeManager()
 }
 
-// 任务状态回调
-// zh.jin: 不能import task, 会循环import, 所以设置回调
-type TaskStateNotifyCallback func(nid string, state *transfer.TaskState) error
-
 // 注册Node, 分配tnid
 func registerNode(req *transfer.RegisterReq) (code int, tnid string, err error) {
 	var node *models.Node
@@ -139,10 +135,11 @@ type Node struct {
 	// alive_interval uint32
 	login_at time.Time
 	ws       *websocket.Conn
-	seq_lock sync.Mutex
+	lock     sync.Mutex
 	seq      uint32
 	rsp_chan chan *transfer.Message
 	server   *WSServer
+	closed   bool
 }
 
 func NewNode(ws *websocket.Conn, server *WSServer) *Node {
@@ -343,16 +340,22 @@ func (self *Node) SendRequest(msg *transfer.Message) error {
 	if !msg.IsReq() {
 		return errors.New("msg is not request")
 	}
-	self.seq_lock.Lock()
-	msg.Seq = self.seq
-	self.seq++
-	self.seq_lock.Unlock()
 	return self.SendMessage(msg)
 }
 
 func (self *Node) SendMessage(msg *transfer.Message) error {
 	if msg == nil {
 		return errors.New("msg is nil")
+	}
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
+	if msg.IsReq() {
+		msg.Seq = self.seq
+		self.seq++
+	}
+	if self.closed {
+		return fmt.Errorf("%s send msg failed because closed", self)
 	}
 	if self.ws != nil {
 		websocket.JSON.Send(self.ws, *msg)
@@ -362,12 +365,19 @@ func (self *Node) SendMessage(msg *transfer.Message) error {
 
 // 同步获取消息
 func (self *Node) SendRequestSync(msg *transfer.Message, timeout time.Duration) (rsp *transfer.Message, err error) {
+
 	if err = self.SendRequest(msg); err != nil {
 		return
 	}
 
+	var alive bool
+
 	select {
-	case rsp = <-self.rsp_chan:
+	case rsp, alive = <-self.rsp_chan:
+		if !alive {
+			err = fmt.Errorf("%s rsp_chan closed, maybe disconnected")
+			return nil, err
+		}
 		if rsp.Seq != msg.Seq || rsp.Cmd != msg.Cmd {
 			err = fmt.Errorf("%s rsp is not match, %s %s", self, msg, rsp)
 			rsp = nil
@@ -379,12 +389,16 @@ func (self *Node) SendRequestSync(msg *transfer.Message, timeout time.Duration) 
 }
 
 func (self *Node) Close(close_conn bool) {
+	self.lock.Lock()
+	self.closed = true
 	if self.rsp_chan != nil {
 		close(self.rsp_chan)
 	}
 	if close_conn && self.ws != nil {
 		self.ws.Close()
 	}
+	self.lock.Unlock()
+
 	if self.Node != nil {
 		NodeMgr.DelNode(self.Nid)
 		self.Node.UpdateLogoutTime(time.Now())

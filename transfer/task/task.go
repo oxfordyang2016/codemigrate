@@ -36,45 +36,46 @@ type TaskObserver interface {
 
 type UploadReq struct {
 	*transfer.UploadTaskReq
-	Pid string
 }
 
-func NewUploadReq(r *transfer.UploadTaskReq, pid string) (req *UploadReq, err error) {
-	if r == nil || pid == "" {
-		return nil, errors.New("Invalid params")
-	}
-	req = &UploadReq{
-		UploadTaskReq: r,
-		Pid:           pid,
-	}
-	return req, nil
-}
+// func NewUploadReq(r *transfer.UploadTaskReq, pid string) (req *UploadReq, err error) {
+// 	if r == nil || pid == "" {
+// 		return nil, errors.New("Invalid params")
+// 	}
+// 	req = &UploadReq{
+// 		UploadTaskReq: r,
+// 		Pid:           pid,
+// 	}
+// 	return req, nil
+// }
 
 type DownloadReq struct {
 	*transfer.DownloadTaskReq
-	Pid             string
+	// Pid             string
 	FinishedSidList []string //已经下完的片段
 	meta            interface{}
 }
 
-func NewDownloadReq(r *transfer.DownloadTaskReq, pid string, finished_sid_list []string) (req *DownloadReq, err error) {
-	if r == nil || pid == "" {
-		return nil, errors.New("Invalid params")
-	}
-	req = &DownloadReq{
-		DownloadTaskReq: r,
-		Pid:             pid,
-		FinishedSidList: finished_sid_list,
-	}
-	return req, nil
-}
+// func NewDownloadReq(r *transfer.DownloadTaskReq, pid string, finished_sid_list []string) (req *DownloadReq, err error) {
+// 	if r == nil || pid == "" {
+// 		return nil, errors.New("Invalid params")
+// 	}
+// 	req = &DownloadReq{
+// 		DownloadTaskReq: r,
+// 		Pid:             pid,
+// 		FinishedSidList: finished_sid_list,
+// 	}
+// 	return req, nil
+// }
 
 type Task struct {
 	TaskId      string // 任务ID
-	Type        int    // 类型, U or D
+	Uid         string
+	Pid         string
+	Fid         string
+	Type        int // 类型, U or D
 	UploadReq   *UploadReq
 	DownloadReq *DownloadReq
-	Fid         string
 	SegsState   map[string]*transfer.TaskState
 	CreateAt    time.Time
 	UpdateAt    time.Time
@@ -92,12 +93,16 @@ func NewTask(msg *transfer.Message) *Task {
 	if msg.Cmd == "uploadtask" {
 		req := msg.Req.UploadTask
 		t.TaskId = req.TaskId
+		t.Uid = req.Uid
+		t.Pid = req.Pid
 		t.Fid = req.Fid
 		t.Type = cydex.UPLOAD
 		sid_list = req.SidList
 	} else {
 		req := msg.Req.DownloadTask
 		t.TaskId = req.TaskId
+		t.Uid = req.Uid
+		t.Pid = req.Pid
 		t.Fid = req.Fid
 		t.Type = cydex.DOWNLOAD
 		sid_list = req.SidList
@@ -114,6 +119,23 @@ func NewTask(msg *transfer.Message) *Task {
 
 func (self *Task) IsDispatched() bool {
 	return self.Node != nil
+}
+
+func (self *Task) Stop() {
+	clog.Infof("%s stop", self)
+	if !self.IsDispatched() {
+		return
+	}
+
+	const timeout = 5 * time.Second
+
+	msg := transfer.NewReqMessage("", "stoptask", "", 0)
+	msg.Req.StopTask = &transfer.StopTaskReq{
+		TaskId: self.TaskId,
+	}
+	if _, err := self.Node.SendRequestSync(msg, timeout); err != nil {
+		return
+	}
 }
 
 func (self *Task) IsOver() bool {
@@ -133,13 +155,13 @@ func (self *Task) String() string {
 	var s string
 	switch self.Type {
 	case cydex.UPLOAD:
-		s = "u"
+		s = "U"
 	case cydex.DOWNLOAD:
-		s = "d"
+		s = "D"
 	default:
 		s = "?"
 	}
-	return fmt.Sprintf("<Task(%s %s %d)>", self.TaskId[:8], s, len(self.SegsState))
+	return fmt.Sprintf("<Task(id:%s %s segs:%d)>", self.TaskId[:8], s, len(self.SegsState))
 }
 
 // 任务管理器
@@ -193,17 +215,14 @@ func (self *TaskManager) AddTask(t *Task) {
 		}
 	}
 
-	defer func() {
-		self.lock.Unlock()
-		clog.Infof("Add task %s", t)
-	}()
-
 	self.lock.Lock()
+	defer self.lock.Unlock()
 
 	self.tasks[t.TaskId] = t
 	for _, o := range self.observers {
 		o.AddTask(t)
 	}
+	clog.Infof("Add task %s", t)
 }
 
 func (self *TaskManager) GetTask(taskid string) (t *Task) {
@@ -257,6 +276,7 @@ func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (
 
 	t := NewTask(msg)
 	t.UploadReq = req
+	t.Node = node
 	TaskMgr.AddTask(t)
 	return
 }
@@ -290,32 +310,15 @@ func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duratio
 
 	t := NewTask(msg)
 	t.DownloadReq = req
-	// t := &Task{
-	// 	TaskId:      req.TaskId,
-	// 	Type:        cydex.DOWNLOAD,
-	// 	Node:        node,
-	// 	DownloadReq: req,
-	// 	CreateAt:    time.Now(),
-	// 	UpdateAt:    time.Now(),
-	// 	Fid:         req.DownloadTaskReq.Fid,
-	// 	SegsState:   make(map[string]*transfer.TaskState),
-	// }
+	t.Node = node
 	TaskMgr.AddTask(t)
 	return
 }
 
-// func (self *TaskManager) OnTaskStateNotify(nid string, state *transfer.TaskState) (err error) {
-// 	if !self.task_state_routine_run {
-// 		self.task_state_routine_run = true
-// 	}
-// 	self.task_state_chan <- state
-// 	return
-// }
-
 func (self *TaskManager) handleTaskState(state *transfer.TaskState) (err error) {
 	// clog.Tracef("TaskState: %+v", state)
 	t := self.GetTask(state.TaskId)
-	clog.Trace(t)
+	// clog.Trace(t)
 	if t != nil {
 		t.UpdateAt = time.Now()
 		s := t.SegsState[state.Sid]
@@ -341,6 +344,7 @@ func (self *TaskManager) handleTaskState(state *transfer.TaskState) (err error) 
 	return
 }
 
+// 侦听node接收的任务状态消息
 func (self *TaskManager) ListenTaskState() {
 	go func() {
 		for states := range trans.NodeMgr.StateChan {
@@ -349,4 +353,16 @@ func (self *TaskManager) ListenTaskState() {
 			}
 		}
 	}()
+}
+
+// 根据相关信息停止任务
+func (self *TaskManager) StopTasks(uid, pid string, typ int) {
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
+	for _, t := range self.tasks {
+		if t.Uid == uid && t.Pid == pid && t.Type == typ {
+			go t.Stop()
+		}
+	}
 }

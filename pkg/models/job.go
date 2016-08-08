@@ -82,6 +82,39 @@ func GetUnFinishedJobs() ([]*Job, error) {
 	return jobs, nil
 }
 
+// 删除job
+func DeleteJob(jobid string) (err error) {
+	j := &Job{JobId: jobid}
+	has, err := DB().Get(j)
+	if err != nil {
+		return err
+	}
+	if !has {
+		return nil
+	}
+
+	session := DB().NewSession()
+	defer SessionRelease(session)
+	if err := session.Begin(); err != nil {
+		return err
+	}
+	jds := make([]*JobDetail, 0, 100)
+	if err = session.Where("job_id=?", jobid).Find(&jds); err != nil {
+		return err
+	}
+	for _, jd := range jds {
+		if _, err = session.Delete(jd); err != nil {
+			return err
+		}
+	}
+	session.Delete(j)
+	if err = session.Commit(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // // 按照Pid查询下载的包,
 // // @param with_details 是否包含文件详细信息
 // // @param include_finished 是否包含已结束的包

@@ -19,3 +19,10 @@ func DB() *xorm.Engine {
 func SyncTables() error {
 	return db.SyncTables(Tables)
 }
+
+func SessionRelease(sess *xorm.Session) {
+	if !sess.IsCommitedOrRollbacked {
+		sess.Rollback()
+	}
+	sess.Close()
+}

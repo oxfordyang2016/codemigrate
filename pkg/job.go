@@ -68,6 +68,7 @@ func getFidFromTask(t *task.Task) (fid string) {
 }
 
 // 获取运行时segs的信息, 没有就添加进runtime
+// size表示接收到的size, 不是seg的size
 func getSegRuntime(jd *models.JobDetail, sid string) (s *models.Seg) {
 	if jd.Segs == nil {
 		clog.Trace("new segs map")
@@ -132,9 +133,10 @@ type JobManager struct {
 	lock               sync.Mutex
 	cache_sync_timeout time.Duration //cache同步超时时间
 
-	jobs        map[string]*models.Job // jobid
-	track_users map[string]*Track      // uid->track, track里记录上传下载的pid
-	track_pkgs  map[string]*Track      // pid->track, track里记录上传下载的uid
+	jobs          map[string]*models.Job // jobid->job, cache
+	track_users   map[string]*Track      // uid->track, track里记录上传下载的pid
+	track_pkgs    map[string]*Track      // pid->track, track里记录上传下载的uid
+	track_deletes map[string]*Track      // uid->track, track里记录被删除的pid
 }
 
 func NewJobManager() *JobManager {
@@ -143,25 +145,44 @@ func NewJobManager() *JobManager {
 	jm.jobs = make(map[string]*models.Job)
 	jm.track_users = make(map[string]*Track)
 	jm.track_pkgs = make(map[string]*Track)
+	jm.track_deletes = make(map[string]*Track)
 	return jm
 }
 
 // 创建一个新任务, 因为是活动任务,会加入cache
 func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 	clog.Infof("create job: u[%s], p[%s], t[%d]", uid, pid, typ)
-	session := models.DB().NewSession()
-	session.Begin()
-
-	defer func() {
-		if err != nil {
-			clog.Errorf("create job failed: %s", err)
-			session.Rollback()
-		}
-		session.Close()
-	}()
-
 	hashid := HashJob(uid, pid, typ)
 	jobid := hashid
+
+	// 已经存在的重新加入track
+	if job_m, _ := models.GetJob(jobid, false); job_m != nil {
+		clog.Warnf("%s is existed, add to track again", jobid)
+		self.lock.Lock()
+		// add track
+		self.AddTrack(uid, pid, typ, false)
+		// issue-1, 上传用户要监控下载用户状态,上传完的要加入track
+		if typ == cydex.DOWNLOAD {
+			upload_jobs, _ := models.GetJobsByPid(pid, cydex.UPLOAD)
+			for _, u_job := range upload_jobs {
+				self.AddTrack(u_job.Uid, u_job.Pid, u_job.Type, false)
+			}
+		}
+		self.lock.Unlock()
+		return nil
+	}
+
+	session := models.DB().NewSession()
+	defer func() {
+		models.SessionRelease(session)
+		if err != nil {
+			clog.Errorf("create job failed: %s", err)
+		}
+	}()
+	if err = session.Begin(); err != nil {
+		return
+	}
+
 	j := &models.Job{
 		JobId: jobid,
 		Uid:   uid,
@@ -195,10 +216,11 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 		// j.Details[f.Fid] = jd
 		clog.Tracef("insert job_detail fid:%s", f.Fid)
 	}
-	session.Commit()
+	if err = session.Commit(); err != nil {
+		return
+	}
 
 	self.lock.Lock()
-	// self.jobs[hashid] = j
 	// add track
 	self.AddTrack(uid, pid, typ, false)
 	// issue-1, 上传用户要监控下载用户状态,上传完的要加入track
@@ -211,6 +233,31 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 	self.lock.Unlock()
 
 	return nil
+}
+
+// 删除job
+func (self *JobManager) DeleteJob(uid, pid string, typ int) (err error) {
+	hashid := HashJob(uid, pid, typ)
+	clog.Infof("delete job: %s", hashid)
+	job, _ := models.GetJob(hashid, false)
+	if job == nil {
+		return
+	}
+	if err = models.DeleteJob(hashid); err != nil {
+		return
+	}
+
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
+	self.DelTrack(uid, pid, typ, false)
+	delete(self.jobs, hashid)
+	// 要加入delete track, client通过增量接口获取
+	self.AddTrackOfDelete(uid, pid, typ, false)
+
+	clog.Debugf("delete job: %s over", hashid)
+
+	return
 }
 
 // 从cache里取; 没有的话从数据库取; 如果是非finished,则加入cache
@@ -230,7 +277,6 @@ func (self *JobManager) GetJob(hashid string) *models.Job {
 	}
 	if j != nil {
 		j.Details = make(map[string]*models.JobDetail)
-		// TODO: 这里要判断是否track里的状态, 上传要监测下载, issue-1
 		if !j.Finished {
 			j.GetDetails()
 			// save to cache
@@ -542,6 +588,66 @@ func (self *JobManager) LoadTracks() error {
 	return nil
 }
 
+// 增加delete_track的信息
+func (self *JobManager) AddTrackOfDelete(uid string, pid string, typ int, mutex bool) {
+	if mutex {
+		self.lock.Lock()
+		defer self.lock.Unlock()
+	}
+
+	clog.Debugf("add delete track, u[%s], p[%s], t[%d]", uid, pid, typ)
+	track, _ := self.track_deletes[uid]
+	if track == nil {
+		track = NewTrack()
+		self.track_deletes[uid] = track
+	}
+	if typ == cydex.UPLOAD {
+		track.Uploads[pid] = 1
+	} else {
+		track.Downloads[pid] = 1
+	}
+}
+
+// 获取delete_track的信息
+// remove表示获取后是否删除,下次就取不到了
+func (self *JobManager) getTrackOfDelete(uid string, typ int, remove bool) (pids []string) {
+	var m map[string]int
+	track, _ := self.track_deletes[uid]
+	if track == nil {
+		return
+	}
+
+	if typ == cydex.UPLOAD {
+		m = track.Uploads
+	} else {
+		m = track.Downloads
+	}
+	for k, _ := range m {
+		pids = append(pids, k)
+
+		if remove {
+			delete(m, k)
+		}
+	}
+
+	if len(track.Uploads) == 0 && len(track.Downloads) == 0 {
+		delete(self.track_deletes, uid)
+	}
+
+	return
+}
+
+// 获取delete_track的信息
+// remove表示获取后是否删除,下次就取不到了
+func (self *JobManager) GetTrackOfDelete(uid string, typ int, remove, mutex bool) (pids []string) {
+	if mutex {
+		self.lock.Lock()
+		defer self.lock.Unlock()
+	}
+	pids = self.getTrackOfDelete(uid, typ, remove)
+	return
+}
+
 func (self *JobManager) ClearTracks(mutex bool) {
 	if mutex {
 		defer self.lock.Unlock()
@@ -549,4 +655,5 @@ func (self *JobManager) ClearTracks(mutex bool) {
 	}
 	self.track_users = make(map[string]*Track)
 	self.track_pkgs = make(map[string]*Track)
+	self.track_deletes = make(map[string]*Track)
 }

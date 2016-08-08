@@ -29,36 +29,46 @@ func Test_Track(t *testing.T) {
 	u1 := "u1"
 	p1 := "p1"
 	u2 := "u2"
-	p2 := "p2"
+	u3 := "u3"
+	p3 := "p3"
 
 	Convey("Test track", t, func() {
 		Convey("Add track", func() {
 			JobMgr.AddTrack(u1, p1, cydex.UPLOAD, true)
-			JobMgr.AddTrack(u2, p1, cydex.DOWNLOAD, true)
-			JobMgr.AddTrack(u2, p2, cydex.DOWNLOAD, true)
+			JobMgr.AddTrack(u3, p3, cydex.UPLOAD, true)
 
-			So(JobMgr.track_users, ShouldHaveLength, 2)
+			JobMgr.AddTrack(u2, p1, cydex.DOWNLOAD, true)
+			JobMgr.AddTrack(u2, p3, cydex.DOWNLOAD, true)
+			JobMgr.AddTrack(u3, p1, cydex.DOWNLOAD, true)
+
+			So(JobMgr.track_users, ShouldHaveLength, 3)
 			So(JobMgr.track_pkgs, ShouldHaveLength, 2)
 		})
 
 		Convey("get user track", func() {
 			pids := JobMgr.GetUserTrack(u2, cydex.DOWNLOAD)
 			So(pids, ShouldHaveLength, 2)
-			So(p2, ShouldBeIn, pids)
+			So(p3, ShouldBeIn, pids)
 			So(p1, ShouldBeIn, pids)
 
 			pids = JobMgr.GetUserTrack(u1, cydex.DOWNLOAD)
 			So(pids, ShouldBeEmpty)
+
+			pids = JobMgr.GetUserTrack(u3, cydex.DOWNLOAD)
+			So(pids, ShouldHaveLength, 1)
+			So(p1, ShouldBeIn, pids)
 		})
 
 		Convey("get pkg track", func() {
 			uids := JobMgr.GetPkgTrack(p1, cydex.DOWNLOAD)
-			So(uids, ShouldHaveLength, 1)
+			So(uids, ShouldHaveLength, 2)
 			So(u2, ShouldBeIn, uids)
+			So(u3, ShouldBeIn, uids)
 			So(u1, ShouldNotBeIn, uids)
 
-			uids = JobMgr.GetPkgTrack(p2, cydex.DOWNLOAD)
+			uids = JobMgr.GetPkgTrack(p3, cydex.DOWNLOAD)
 			So(uids, ShouldHaveLength, 1)
+			So(u2, ShouldBeIn, uids)
 		})
 
 		Convey("del track", func() {
@@ -67,11 +77,19 @@ func Test_Track(t *testing.T) {
 
 			JobMgr.DelTrack(u1, p1, cydex.UPLOAD, true)
 			uids = JobMgr.GetPkgTrack(p1, cydex.UPLOAD)
-			So(uids, ShouldBeEmpty)
+			// 没下载完, 上传track不删档
+			So(uids, ShouldHaveLength, 1)
 
-			JobMgr.DelTrack("no this uid", p2, cydex.UPLOAD, true)
+			JobMgr.DelTrack(u2, p1, cydex.DOWNLOAD, true)
+			JobMgr.DelTrack(u3, p1, cydex.DOWNLOAD, true)
+			uids = JobMgr.GetPkgTrack(p1, cydex.UPLOAD)
+			So(uids, ShouldHaveLength, 0)
 
-			uids = JobMgr.GetPkgTrack(p2, cydex.DOWNLOAD)
+			// nothing happend if uid or pid is not match
+			JobMgr.DelTrack("no this uid", p1, cydex.UPLOAD, true)
+
+			// nothing happend to p3
+			uids = JobMgr.GetPkgTrack(p3, cydex.DOWNLOAD)
 			So(uids, ShouldHaveLength, 1)
 			So(u2, ShouldBeIn, uids)
 		})
@@ -91,7 +109,18 @@ func Test_CreateJob(t *testing.T) {
 
 	Convey("Test CreateJob", t, func() {
 		Convey("Create pkg records first", func() {
-			_, err = models.CreatePkg(pid, "test", "test", 2, 5000, cydex.ENCRYPTION_TYPE_AES256)
+			pkg := &models.Pkg{
+				Pid:            pid,
+				Title:          "test",
+				Notes:          "test",
+				NumFiles:       2,
+				Size:           5000,
+				EncryptionType: cydex.ENCRYPTION_TYPE_AES256,
+				MetaData: &cydex.MetaData{
+					MtuSize: 1234,
+				},
+			}
+			err = models.CreatePkg(pkg)
 			So(err, ShouldBeNil)
 
 			_, err = models.CreateFile(fid1, pid, "1.txt", "/tmp", 2000, 1)
@@ -146,11 +175,11 @@ func Test_CreateJob(t *testing.T) {
 					UploadReq: &task.UploadReq{
 						UploadTaskReq: &transfer.UploadTaskReq{
 							Uid:     "1234567890ab",
+							Pid:     pid,
 							Fid:     fid1,
 							SidList: []string{sid1_of_fid1},
 							Size:    2000,
 						},
-						Pid: pid,
 					},
 				}
 				JobMgr.AddTask(t)
@@ -173,11 +202,11 @@ func Test_CreateJob(t *testing.T) {
 					UploadReq: &task.UploadReq{
 						UploadTaskReq: &transfer.UploadTaskReq{
 							Uid:     "1234567890ab",
+							Pid:     pid,
 							Fid:     fid1,
 							SidList: []string{sid1_of_fid1},
 							Size:    2000,
 						},
-						Pid: pid,
 					},
 				}
 				JobMgr.TaskStateNotify(t, state)
@@ -200,11 +229,11 @@ func Test_CreateJob(t *testing.T) {
 					UploadReq: &task.UploadReq{
 						UploadTaskReq: &transfer.UploadTaskReq{
 							Uid:     "1234567890ab",
+							Pid:     pid,
 							Fid:     fid1,
 							SidList: []string{sid1_of_fid1},
 							Size:    2000,
 						},
-						Pid: pid,
 					},
 				}
 				JobMgr.TaskStateNotify(t, state)
@@ -230,11 +259,11 @@ func Test_CreateJob(t *testing.T) {
 					UploadReq: &task.UploadReq{
 						UploadTaskReq: &transfer.UploadTaskReq{
 							Uid:     "1234567890ab",
+							Pid:     pid,
 							Fid:     fid2,
 							SidList: []string{sid1_of_fid2},
 							Size:    3000,
 						},
-						Pid: pid,
 					},
 				}
 				JobMgr.TaskStateNotify(t, state)
@@ -244,6 +273,57 @@ func Test_CreateJob(t *testing.T) {
 				So(j.Finished, ShouldBeTrue)
 				So(JobMgr.HasCachedJob(j.JobId), ShouldBeFalse)
 			})
+		})
+	})
+}
+
+func Test_TrackOfDelete(t *testing.T) {
+	u1 := "u1"
+	p1 := "p1"
+	u2 := "u2"
+	p2 := "p2"
+
+	Convey("Test track of delete", t, func() {
+		Convey("add", func() {
+			JobMgr.AddTrackOfDelete(u1, p1, cydex.UPLOAD, true)
+			JobMgr.AddTrackOfDelete(u2, p1, cydex.DOWNLOAD, true)
+			JobMgr.AddTrackOfDelete(u2, p2, cydex.DOWNLOAD, true)
+
+			So(JobMgr.track_deletes, ShouldHaveLength, 2)
+		})
+
+		Convey("get", func() {
+			pids := JobMgr.GetTrackOfDelete(u2, cydex.DOWNLOAD, false, true)
+			So(pids, ShouldHaveLength, 2)
+			So(p1, ShouldBeIn, pids)
+			So(p2, ShouldBeIn, pids)
+
+			pids = JobMgr.GetTrackOfDelete(u1, cydex.UPLOAD, false, true)
+			So(pids, ShouldHaveLength, 1)
+			So(p1, ShouldBeIn, pids)
+
+			pids = JobMgr.GetTrackOfDelete(u1, cydex.DOWNLOAD, false, true)
+			So(pids, ShouldBeEmpty)
+		})
+
+		Convey("get and delete", func() {
+			So(JobMgr.track_deletes, ShouldHaveLength, 2)
+
+			pids := JobMgr.GetTrackOfDelete(u2, cydex.DOWNLOAD, true, true)
+			So(pids, ShouldHaveLength, 2)
+			So(p1, ShouldBeIn, pids)
+			So(p2, ShouldBeIn, pids)
+
+			So(JobMgr.track_deletes, ShouldHaveLength, 1)
+
+			pids = JobMgr.GetTrackOfDelete(u1, cydex.UPLOAD, true, true)
+			So(pids, ShouldHaveLength, 1)
+			So(p1, ShouldBeIn, pids)
+
+			So(JobMgr.track_deletes, ShouldBeEmpty)
+
+			pids = JobMgr.GetTrackOfDelete(u1, cydex.DOWNLOAD, false, true)
+			So(pids, ShouldBeEmpty)
 		})
 	})
 }

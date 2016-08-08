@@ -42,9 +42,9 @@ func Test_RestrictUploadScheduler(t *testing.T) {
 					UploadTaskReq: &transfer.UploadTaskReq{
 						TaskId: "t1",
 						Uid:    "1234567890ab",
+						Pid:    "1234567890ab1111122222",
 						Fid:    "1234567890ab111112222201",
 					},
-					Pid: "1234567890ab1111122222",
 				},
 			}
 			S.AddTask(t1)
@@ -53,9 +53,9 @@ func Test_RestrictUploadScheduler(t *testing.T) {
 				UploadTaskReq: &transfer.UploadTaskReq{
 					TaskId: "t1",
 					Uid:    "1234567890ab",
+					Pid:    "1234567890ab1111122222",
 					Fid:    "1234567890ab111112222202",
 				},
-				Pid: "1234567890ab1111122222",
 			}
 			n, err := S.DispatchUpload(r1)
 			So(err, ShouldBeNil)
@@ -65,9 +65,9 @@ func Test_RestrictUploadScheduler(t *testing.T) {
 				UploadTaskReq: &transfer.UploadTaskReq{
 					TaskId: "t2",
 					Uid:    "1234567890ab",
+					Pid:    "1234567890ab1111122223",
 					Fid:    "1234567890ab111112222301",
 				},
-				Pid: "1234567890ab1111122223",
 			}
 			n, err = S.DispatchUpload(r2)
 			So(err, ShouldBeNil)

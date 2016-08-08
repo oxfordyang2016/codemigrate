@@ -67,11 +67,12 @@ func (self *TransferController) Post() {
 func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cydex.TransferRsp) {
 	clog.Trace("download")
 	uid := self.GetString(":uid")
+	pid := pkg.GetUnpacker().GetPidFromFid(req.Fid)
 	task_req := new(task.DownloadReq)
-	task_req.Pid = pkg.GetUnpacker().GetPidFromFid(req.Fid)
 	task_req.DownloadTaskReq = &transfer.DownloadTaskReq{
 		TaskId:  task.GenerateTaskId(),
 		Uid:     uid,
+		Pid:     pid,
 		Fid:     req.Fid,
 		SidList: req.SegIds,
 	}
@@ -94,7 +95,7 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 		return
 	}
 
-	rsp.Host = node.Host
+	rsp.Host = getHost(node.Host)
 	rsp.Port = task_rsp.Port
 	rsp.RecomendBitrate = task_rsp.RecomendBitrate
 	for _, sid := range task_rsp.SidList {
@@ -112,10 +113,11 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex.TransferRsp) {
 	uid := self.GetString(":uid")
 	task_req := new(task.UploadReq)
-	task_req.Pid = pkg.GetUnpacker().GetPidFromFid(req.Fid)
+	pid := pkg.GetUnpacker().GetPidFromFid(req.Fid)
 	task_req.UploadTaskReq = &transfer.UploadTaskReq{
 		TaskId:  task.GenerateTaskId(),
 		Uid:     uid,
+		Pid:     pid,
 		Fid:     req.Fid,
 		SidList: req.SegIds,
 	}
@@ -143,7 +145,7 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 		update_storage = false
 	}
 
-	rsp.Host = node.Host
+	rsp.Host = getHost(node.Host)
 	rsp.Port = task_rsp.Port
 	rsp.RecomendBitrate = task_rsp.RecomendBitrate
 	for i, sid := range task_rsp.SidList {
@@ -159,4 +161,12 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 			rsp.Segs = append(rsp.Segs, seg)
 		}
 	}
+}
+
+// 如果是"127.0.0.1", 则返回空,兼容单机版
+func getHost(host string) string {
+	if host == "127.0.0.1" {
+		return ""
+	}
+	return host
 }
