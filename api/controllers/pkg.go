@@ -656,18 +656,41 @@ func (self *PkgController) Delete() {
 	}()
 
 	hashid := pkg.HashJob(uid, pid, cydex.UPLOAD)
+	clog.Trace(hashid)
 	job_m, _ := pkg_model.GetJob(hashid, true)
 	if job_m == nil || job_m.Pkg == nil {
+		clog.Trace("here 000000000")
 		rsp.Error = cydex.ErrPackageNotExisted
 		return
 	}
-	upload_jobs, _ := pkg.JobMgr.GetJobsByPid(pid, cydex.UPLOAD)
-	download_jobs, _ := pkg.JobMgr.GetJobsByPid(pid, cydex.DOWNLOAD)
-	if upload_jobs != nil || download_jobs != nil {
+	clog.Trace("here 1111111111111")
+	transferring, err := pkg.PkgIsTransferring(pid, cydex.UPLOAD)
+	if err != nil {
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	if transferring {
+		rsp.Error = cydex.ErrActivePackage
+		return
+	}
+	transferring, err = pkg.PkgIsTransferring(pid, cydex.DOWNLOAD)
+	if err != nil {
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	if transferring {
 		rsp.Error = cydex.ErrActivePackage
 		return
 	}
 
+	clog.Trace("here 222222222")
+	//上传Job软删除
+	job_m.SoftDelete(pkg_model.SOFT_DELETE_TAG)
+	// 下载Job真删除
+	download_jobs, _ := pkg_model.GetJobsByPid(pid, cydex.DOWNLOAD)
+	for _, j := range download_jobs {
+		pkg_model.DeleteJob(j.JobId)
+	}
 	// TODO 删除文件, 释放空间
 }
 

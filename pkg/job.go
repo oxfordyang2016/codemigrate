@@ -657,3 +657,26 @@ func (self *JobManager) ClearTracks(mutex bool) {
 	self.track_pkgs = make(map[string]*Track)
 	self.track_deletes = make(map[string]*Track)
 }
+
+func PkgIsTransferring(pid string, typ int) (bool, error) {
+	jobs, err := JobMgr.GetJobsByPid(pid, typ)
+	if err != nil {
+		return false, err
+	}
+	if jobs == nil {
+		jobs, err = models.GetJobsByPid(pid, typ)
+		if err != nil {
+			return false, err
+		}
+	}
+	for _, job := range jobs {
+		job.GetPkg(true)
+		for _, f := range job.Pkg.Files {
+			jd := JobMgr.GetJobDetail(job.JobId, f.Fid)
+			if jd != nil && jd.State == cydex.TRANSFER_STATE_DOING {
+				return true, nil
+			}
+		}
+	}
+	return false, nil
+}

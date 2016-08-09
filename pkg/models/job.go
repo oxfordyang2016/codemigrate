@@ -7,6 +7,11 @@ import (
 	"time"
 )
 
+const (
+	SOFT_DELETE_TAG           = 1 //标记
+	SOFT_DELETE_FILES_REMOVED = 2 //TN上文件已删除
+)
+
 type Job struct {
 	Id       uint64    `xorm:"pk autoincr"`
 	JobId    string    `xorm:"unique not null"`
@@ -18,6 +23,7 @@ type Job struct {
 	FinishAt time.Time `xorm:"DateTime"`
 	CreateAt time.Time `xorm:"DateTime created"`
 	UpdateAt time.Time `xorm:"DateTime updated"`
+	SoftDel  int       `xorm:"BOOL not null default(0)"`
 
 	// runtime usage
 	Details            map[string]*JobDetail `xorm:"-"`
@@ -52,7 +58,7 @@ func GetJob(jobid string, with_pkg bool) (*Job, error) {
 func GetJobsByUid(uid string, typ int, p *cydex.Pagination) ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	var err error
-	sess := DB().Where("uid=? and type=?", uid, typ)
+	sess := DB().Where("uid=? and type=? and soft_del=0", uid, typ)
 	if p != nil {
 		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
 	}
@@ -65,7 +71,7 @@ func GetJobsByUid(uid string, typ int, p *cydex.Pagination) ([]*Job, error) {
 func GetJobsByPid(pid string, typ int) ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	var err error
-	sess := DB().Where("pid=? and type=?", pid, typ)
+	sess := DB().Where("pid=? and type=? and soft_del=0", pid, typ)
 	if err = sess.Find(&jobs); err != nil {
 		return nil, err
 	}
@@ -76,7 +82,7 @@ func GetJobsByPid(pid string, typ int) ([]*Job, error) {
 func GetUnFinishedJobs() ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	var err error
-	if err = DB().Where("finished=0").Find(&jobs); err != nil {
+	if err = DB().Where("finished=0 and del=0").Find(&jobs); err != nil {
 		return nil, err
 	}
 	return jobs, nil
@@ -185,6 +191,18 @@ func (self *Job) GetPkg(with_files bool) (err error) {
 		return
 	}
 	return
+}
+
+// 软删除
+func (self *Job) SoftDelete(tag int) (err error) {
+	if tag != SOFT_DELETE_TAG && tag != SOFT_DELETE_FILES_REMOVED {
+		return fmt.Errorf("unsupport soft delete tag:%d", tag)
+	}
+	j := &Job{
+		SoftDel: tag,
+	}
+	_, err = DB().Where("job_id=?", self.JobId).Cols("soft_del").Update(j)
+	return err
 }
 
 func (self *Job) String() string {
