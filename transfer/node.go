@@ -417,7 +417,6 @@ func (self *Node) SendRequestSync(msg *transfer.Message, timeout time.Duration) 
 				delete(self.rsp_msgs, m.Seq)
 			}
 		}
-		clog.Tracef("yyyyyyyyyyyyyyyy: %d", len(self.rsp_msgs))
 	case <-time.After(timeout):
 		err = fmt.Errorf("%s msg %s wait rsp timeout", self, msg.Cmd)
 	}

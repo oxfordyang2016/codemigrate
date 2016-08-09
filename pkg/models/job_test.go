@@ -11,8 +11,8 @@ import (
 )
 
 var (
-	TEST_DB = ":memory:"
-	// TEST_DB  = "/tmp/job.sqlite3"
+	// TEST_DB = ":memory:"
+	TEST_DB  = "/tmp/job.sqlite3"
 	SHOW_SQL = false
 )
 
@@ -27,13 +27,27 @@ func Test_Job(t *testing.T) {
 		Convey("Test create", func() {
 			j, err := CreateJob("123", "1", "2", cydex.UPLOAD)
 			So(err, ShouldBeNil)
-			So(j.Finished, ShouldBeFalse)
+			So(j.State, ShouldEqual, cydex.TRANSFER_STATE_IDLE)
 		})
 		Convey("Test update", func() {
-			j, err := CreateJob("321", "1", "2", cydex.UPLOAD)
+			j, err := CreateJob("321", "1", "2", cydex.DOWNLOAD)
 			So(err, ShouldBeNil)
-			j.Finish()
-			So(j.Finished, ShouldBeTrue)
+
+			j.SetState(cydex.TRANSFER_STATE_DOING)
+			So(j.State, ShouldEqual, cydex.TRANSFER_STATE_DOING)
+			j, err = GetJob("321", false)
+			So(j.State, ShouldEqual, cydex.TRANSFER_STATE_DOING)
+			So(j.FinishAt.IsZero(), ShouldBeTrue)
+
+			j.SetState(cydex.TRANSFER_STATE_DONE)
+			So(j.State, ShouldEqual, cydex.TRANSFER_STATE_DONE)
+			j, err = GetJob("321", false)
+			So(j.State, ShouldEqual, cydex.TRANSFER_STATE_DONE)
+			So(j.FinishAt.IsZero(), ShouldBeFalse)
+
+			// 不影响其他记录
+			j, err = GetJob("123", false)
+			So(j.State, ShouldEqual, cydex.TRANSFER_STATE_IDLE)
 		})
 	})
 }

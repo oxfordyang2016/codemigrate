@@ -243,7 +243,7 @@ func Test_CreateJob(t *testing.T) {
 			})
 
 			Convey("job end", func() {
-				So(j.Finished, ShouldBeFalse)
+				So(j.State, ShouldEqual, cydex.TRANSFER_STATE_IDLE)
 
 				jd := JobMgr.GetJobDetail(j.JobId, fid2)
 				state := &transfer.TaskState{
@@ -270,7 +270,7 @@ func Test_CreateJob(t *testing.T) {
 				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_DONE)
 
 				So(j.NumFinishedDetails, ShouldEqual, 2)
-				So(j.Finished, ShouldBeTrue)
+				So(j.State, ShouldEqual, cydex.TRANSFER_STATE_DONE)
 				So(JobMgr.HasCachedJob(j.JobId), ShouldBeFalse)
 			})
 		})
