@@ -15,6 +15,11 @@ import (
 	"time"
 )
 
+const (
+	// 响应消息的超时时间,如果超过则需要删除
+	MESSAGE_TIMEOUT = 5 * time.Minute
+)
+
 var (
 	NodeMgr *NodeManager
 )
@@ -122,6 +127,17 @@ type NodeInfo struct {
 	DownloadBandwidth uint64
 }
 
+type TimeMessage struct {
+	*transfer.Message
+	ts time.Time
+}
+
+func NewTimeMessage(msg *transfer.Message) *TimeMessage {
+	return &TimeMessage{
+		msg, time.Now(),
+	}
+}
+
 // TransferNode
 type Node struct {
 	*models.Node
@@ -137,7 +153,10 @@ type Node struct {
 	ws       *websocket.Conn
 	lock     sync.Mutex
 	seq      uint32
-	rsp_chan chan *transfer.Message
+	// rsp_chan chan *TimeMessage
+	rsp_sem  chan int
+	rsp_lock sync.Mutex
+	rsp_msgs map[uint32]*TimeMessage
 	server   *WSServer
 	closed   bool
 }
@@ -146,6 +165,9 @@ func NewNode(ws *websocket.Conn, server *WSServer) *Node {
 	n := new(Node)
 	n.server = server
 	n.SetWSConn(ws)
+	// n.rsp_chan = make(chan *TimeMessage)
+	n.rsp_sem = make(chan int)
+	n.rsp_msgs = make(map[uint32]*TimeMessage)
 	return n
 }
 
@@ -207,7 +229,10 @@ func (self *Node) HandleMsg(msg *transfer.Message) (rsp *transfer.Message, err e
 			self.Update(false)
 		}
 	} else {
-		self.rsp_chan <- msg
+		self.rsp_lock.Lock()
+		self.rsp_msgs[msg.Seq] = NewTimeMessage(msg)
+		self.rsp_lock.Unlock()
+		self.rsp_sem <- 1
 	}
 	return
 }
@@ -276,7 +301,6 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 	self.Info.FreeMem = msg.Req.Login.FreeMem
 	self.Info.UploadBandwidth = msg.Req.Login.UploadBandwidth
 	self.Info.DownloadBandwidth = msg.Req.Login.DownloadBandwidth
-	self.rsp_chan = make(chan *transfer.Message)
 	self.login_at = time.Now()
 	self.Update(true)
 
@@ -373,14 +397,25 @@ func (self *Node) SendRequestSync(msg *transfer.Message, timeout time.Duration) 
 	var alive bool
 
 	select {
-	case rsp, alive = <-self.rsp_chan:
+	case _, alive = <-self.rsp_sem:
 		if !alive {
-			err = fmt.Errorf("%s rsp_chan closed, maybe disconnected")
+			err = fmt.Errorf("%s rsp_sem closed, maybe disconnected")
 			return nil, err
 		}
-		if rsp.Seq != msg.Seq || rsp.Cmd != msg.Cmd {
-			err = fmt.Errorf("%s rsp is not match, %s %s", self, msg, rsp)
-			rsp = nil
+
+		self.rsp_lock.Lock()
+		defer self.rsp_lock.Unlock()
+		time_msg, _ := self.rsp_msgs[msg.Seq]
+		if time_msg != nil && time_msg.Message != nil {
+			rsp = time_msg.Message
+		}
+		delete(self.rsp_msgs, msg.Seq)
+
+		// 删除超时的响应消息
+		for _, m := range self.rsp_msgs {
+			if time.Since(m.ts) >= MESSAGE_TIMEOUT {
+				delete(self.rsp_msgs, m.Seq)
+			}
 		}
 	case <-time.After(timeout):
 		err = fmt.Errorf("%s msg %s wait rsp timeout", self, msg.Cmd)
@@ -391,8 +426,8 @@ func (self *Node) SendRequestSync(msg *transfer.Message, timeout time.Duration) 
 func (self *Node) Close(close_conn bool) {
 	self.lock.Lock()
 	self.closed = true
-	if self.rsp_chan != nil {
-		close(self.rsp_chan)
+	if self.rsp_sem != nil {
+		close(self.rsp_sem)
 	}
 	if close_conn && self.ws != nil {
 		self.ws.Close()

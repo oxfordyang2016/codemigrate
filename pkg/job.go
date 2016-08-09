@@ -124,10 +124,10 @@ func NewTrack() *Track {
 	return t
 }
 
-type JobRuntime struct {
-	*models.Job
-	NumFinishedDetails int
-}
+// type JobRuntime struct {
+// 	*models.Job
+// 	NumFinishedDetails int
+// }
 
 type JobManager struct {
 	lock               sync.Mutex
@@ -277,8 +277,14 @@ func (self *JobManager) GetJob(hashid string) *models.Job {
 	}
 	if j != nil {
 		j.Details = make(map[string]*models.JobDetail)
-		if !j.Finished {
+		if j.State != cydex.TRANSFER_STATE_DONE {
 			j.GetDetails()
+			// issue-6: 需要计数已经完成的jd
+			for _, jd := range j.Details {
+				if jd.State == cydex.TRANSFER_STATE_DONE {
+					j.NumFinishedDetails++
+				}
+			}
 			// save to cache
 			self.jobs[hashid] = j
 		}
@@ -307,15 +313,27 @@ func (self *JobManager) GetJobDetail(jobid, fid string) (jd *models.JobDetail) {
 // implement task.TaskObserver
 func (self *JobManager) AddTask(t *task.Task) {
 	hashid := getHashIdFromTask(t)
-	jd := self.GetJobDetail(hashid, getFidFromTask(t))
+	job := self.GetJob(hashid)
+	if job == nil {
+		return
+	}
+	jd := self.GetJobDetail(hashid, t.Fid)
 	if jd == nil {
 		return
 	}
 	if jd.StartTime.IsZero() {
 		jd.SetStartTime(time.Now())
 	}
-	// 上传需要更新seg storage
-	if t.Type == cydex.UPLOAD {
+	// // 上传需要更新seg storage
+	// if t.Type == cydex.UPLOAD {
+	// }
+
+	if job.State != cydex.TRANSFER_STATE_DOING {
+		if job.State == cydex.TRANSFER_STATE_DONE {
+			clog.Warnf("%s transfer again", job)
+		} else {
+			job.SetState(cydex.TRANSFER_STATE_DOING)
+		}
 	}
 
 	// jzh:不清楚是续传还是补传还是重新下载, 不好处理, api协议有缺陷
@@ -370,7 +388,7 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 
 	// jd is finished
 	if jd.NumFinishedSegs == jd.File.NumSegs {
-		clog.Tracef("%s is finished", jd)
+		clog.Infof("%s is finished", jd)
 		jd.State = cydex.TRANSFER_STATE_DONE
 		jd.FinishTime = time.Now()
 		force_save = true
@@ -378,9 +396,9 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 	}
 
 	// job is finished?
-	if j.NumFinishedDetails == int(j.Pkg.NumFiles) {
-		clog.Tracef("%s is finished", j)
-		j.Finish()
+	if j.NumFinishedDetails == len(j.Details) {
+		clog.Infof("%s is finished", j)
+		j.SetState(cydex.TRANSFER_STATE_DONE)
 		self.lock.Lock()
 		delete(self.jobs, j.JobId) // 从表里删除
 		self.DelTrack(uid, pid, typ, false)
@@ -670,12 +688,8 @@ func PkgIsTransferring(pid string, typ int) (bool, error) {
 		}
 	}
 	for _, job := range jobs {
-		job.GetPkg(true)
-		for _, f := range job.Pkg.Files {
-			jd := JobMgr.GetJobDetail(job.JobId, f.Fid)
-			if jd != nil && jd.State == cydex.TRANSFER_STATE_DOING {
-				return true, nil
-			}
+		if job.State == cydex.TRANSFER_STATE_DOING {
+			return true, nil
 		}
 	}
 	return false, nil

@@ -17,8 +17,7 @@ import (
 
 func fillTransferState(state *cydex.TransferState, uid string, size uint64, jd *pkg_model.JobDetail) {
 	state.Uid = uid
-	// FIXME
-	state.Username = "receiver"
+	state.Username = "placehold.cydex"
 	state.State = jd.State
 	if size > 0 {
 		state.Percent = int(jd.FinishedSize * 100 / size)
@@ -115,6 +114,9 @@ func aggregate(pkg_m *pkg_model.Pkg) (pkg_c *cydex.Pkg, err error) {
 		}
 
 		// fill default if nil
+		if file.Segs == nil {
+			file.Segs = make([]*cydex.Seg, 0)
+		}
 		if file.DownloadState == nil {
 			file.DownloadState = make([]*cydex.TransferState, 0)
 		}
@@ -167,7 +169,7 @@ func (self *PkgsController) getJobs(typ int) {
 	if !page.Verify() {
 		page = nil
 	}
-	// 判断是否是admin
+	// TODO 判断是否是admin
 	// 目前是普通用户处理
 	rsp := new(cydex.QueryPkgRsp)
 	rsp.Error = cydex.OK
@@ -663,7 +665,6 @@ func (self *PkgController) Delete() {
 		rsp.Error = cydex.ErrPackageNotExisted
 		return
 	}
-	clog.Trace("here 1111111111111")
 	transferring, err := pkg.PkgIsTransferring(pid, cydex.UPLOAD)
 	if err != nil {
 		rsp.Error = cydex.ErrInnerServer
@@ -683,13 +684,14 @@ func (self *PkgController) Delete() {
 		return
 	}
 
-	clog.Trace("here 222222222")
 	//上传Job软删除
 	job_m.SoftDelete(pkg_model.SOFT_DELETE_TAG)
 	// 下载Job真删除
 	download_jobs, _ := pkg_model.GetJobsByPid(pid, cydex.DOWNLOAD)
 	for _, j := range download_jobs {
 		pkg_model.DeleteJob(j.JobId)
+		// delete cache
+		pkg.JobMgr.DelTrack(j.Uid, j.Pid, j.Type, true)
 	}
 	// TODO 删除文件, 释放空间
 }

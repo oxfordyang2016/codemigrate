@@ -13,13 +13,14 @@ const (
 )
 
 type Job struct {
-	Id       uint64    `xorm:"pk autoincr"`
-	JobId    string    `xorm:"unique not null"`
-	Type     int       `xorm:"int"` // cydex.UPLOAD or cydex.DOWNLOAD
-	Pid      string    `xorm:"varchar(22) not null"`
-	Pkg      *Pkg      `xorm:"-"`
-	Uid      string    `xorm:"varchar(12) not null"`
-	Finished bool      `xorm:"BOOL not null default(0)"`
+	Id    uint64 `xorm:"pk autoincr"`
+	JobId string `xorm:"unique not null"`
+	Type  int    `xorm:"int"` // cydex.UPLOAD or cydex.DOWNLOAD
+	Pid   string `xorm:"varchar(22) not null"`
+	Pkg   *Pkg   `xorm:"-"`
+	Uid   string `xorm:"varchar(12) not null"`
+	// Finished bool      `xorm:"BOOL not null default(0)"`
+	State    int       `xorm:"int not null default(0)"`
 	FinishAt time.Time `xorm:"DateTime"`
 	CreateAt time.Time `xorm:"DateTime created"`
 	UpdateAt time.Time `xorm:"DateTime updated"`
@@ -82,7 +83,8 @@ func GetJobsByPid(pid string, typ int) ([]*Job, error) {
 func GetUnFinishedJobs() ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	var err error
-	if err = DB().Where("finished=0 and del=0").Find(&jobs); err != nil {
+	where := fmt.Sprintf("state!=%d and soft_del=0", cydex.TRANSFER_STATE_DONE)
+	if err = DB().Where(where).Find(&jobs); err != nil {
 		return nil, err
 	}
 	return jobs, nil
@@ -162,18 +164,27 @@ func (self *Job) GetDetails() error {
 	return err
 }
 
-func (self *Job) Finish() error {
-	j := &Job{
-		Finished: true,
-		FinishAt: time.Now(),
+func (self *Job) SetState(state int) error {
+	self.State = state
+	if state == cydex.TRANSFER_STATE_DONE {
+		self.FinishAt = time.Now()
 	}
-	_, err := DB().Where("job_id=?", self.JobId).Cols("finished", "finish_at").Update(j)
-	if err == nil {
-		self.Finished = j.Finished
-		self.FinishAt = j.FinishAt
-	}
+	_, err := DB().Where("job_id=?", self.JobId).Cols("state", "finish_at").Update(self)
 	return err
 }
+
+// func (self *Job) Finish() error {
+// 	j := &Job{
+// 		Finished: true,
+// 		FinishAt: time.Now(),
+// 	}
+// 	_, err := DB().Where("job_id=?", self.JobId).Cols("finished", "finish_at").Update(j)
+// 	if err == nil {
+// 		self.Finished = j.Finished
+// 		self.FinishAt = j.FinishAt
+// 	}
+// 	return err
+// }
 
 func (self *Job) GetDetail(fid string) *JobDetail {
 	if self.Details == nil {
