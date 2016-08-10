@@ -43,17 +43,10 @@ func getMetaFromTask(t *task.Task) (uid, pid, fid string, typ int) {
 	if t == nil {
 		return
 	}
+	uid = t.Uid
+	pid = t.Pid
+	fid = t.Fid
 	typ = t.Type
-	if t.UploadReq != nil {
-		pid = t.UploadReq.Pid
-		uid = t.UploadReq.Uid
-		fid = t.UploadReq.Fid
-	}
-	if t.DownloadReq != nil {
-		pid = t.DownloadReq.Pid
-		uid = t.DownloadReq.Uid
-		fid = t.DownloadReq.Fid
-	}
 	return
 }
 
@@ -62,10 +55,10 @@ func getHashIdFromTask(t *task.Task) string {
 	return HashJob(uid, pid, typ)
 }
 
-func getFidFromTask(t *task.Task) (fid string) {
-	_, _, fid, _ = getMetaFromTask(t)
-	return
-}
+// func getFidFromTask(t *task.Task) (fid string) {
+// 	_, _, fid, _ = getMetaFromTask(t)
+// 	return
+// }
 
 // 获取运行时segs的信息, 没有就添加进runtime
 // size表示接收到的size, 不是seg的size
@@ -84,32 +77,55 @@ func getSegRuntime(jd *models.JobDetail, sid string) (s *models.Seg) {
 	return
 }
 
-func updateJobDetail(jd *models.JobDetail) {
-	// finished size
-	total := uint64(0)
-	finished_segs := 0
-	for sid, s := range jd.Segs {
-		clog.Tracef("%s %s %d", sid, s.Sid, s.Size)
-		total += s.Size
-		if s.State == cydex.TRANSFER_STATE_DONE {
-			finished_segs++
-		}
+func updateJobDetail(jd *models.JobDetail, state *transfer.TaskState, seg_state int) (save bool) {
+	jd.Bitrate = state.Bitrate
+	if seg_state == cydex.TRANSFER_STATE_DONE {
+		jd.FinishedSize += state.TotalBytes
+		jd.NumFinishedSegs++
+		save = true
+	} else {
+		jd.State = seg_state
 	}
-	clog.Tracef("finished size: %d, finished segs:%d", total, finished_segs)
-	jd.FinishedSize = total
-	jd.NumFinishedSegs = finished_segs
 
-	for _, s := range jd.Segs {
-		if s.State == cydex.TRANSFER_STATE_DOING {
-			jd.State = cydex.TRANSFER_STATE_DOING
-			break
-		}
-		if s.State == cydex.TRANSFER_STATE_PAUSE {
-			jd.State = cydex.TRANSFER_STATE_PAUSE
-			break
-		}
+	clog.Tracef("%s update: %d %d", jd, jd.NumFinishedSegs, jd.FinishedSize)
+
+	// jd is finished?
+	if jd.NumFinishedSegs == jd.File.NumSegs {
+		clog.Infof("%s is finished", jd)
+		jd.State = cydex.TRANSFER_STATE_DONE
+		jd.FinishTime = time.Now()
+		save = true
 	}
+
+	return
 }
+
+// func updateJobDetail(jd *models.JobDetail) {
+// 	// finished size
+// 	total := uint64(0)
+// 	finished_segs := 0
+// 	for sid, s := range jd.Segs {
+// 		clog.Tracef("%s %s %d", sid, s.Sid, s.Size)
+// 		total += s.Size
+// 		if s.State == cydex.TRANSFER_STATE_DONE {
+// 			finished_segs++
+// 		}
+// 	}
+// 	clog.Tracef("finished size: %d, finished segs:%d", total, finished_segs)
+// 	jd.FinishedSize = total
+// 	jd.NumFinishedSegs = finished_segs
+//
+// 	for _, s := range jd.Segs {
+// 		if s.State == cydex.TRANSFER_STATE_DOING {
+// 			jd.State = cydex.TRANSFER_STATE_DOING
+// 			break
+// 		}
+// 		if s.State == cydex.TRANSFER_STATE_PAUSE {
+// 			jd.State = cydex.TRANSFER_STATE_PAUSE
+// 			break
+// 		}
+// 	}
+// }
 
 type Track struct {
 	// int没啥用,这里当作set使用
@@ -155,10 +171,24 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 	hashid := HashJob(uid, pid, typ)
 	jobid := hashid
 
-	// 已经存在的重新加入track
+	// 已经存在的状态要复位,并重新加入track
 	if job_m, _ := models.GetJob(jobid, false); job_m != nil {
 		clog.Warnf("%s is existed, add to track again", jobid)
 		self.lock.Lock()
+		defer self.lock.Unlock()
+
+		// 已经结束的job需要reset, 重新开始
+		if job_m.State == cydex.TRANSFER_STATE_DONE {
+			job_m.Reset()
+			job_m.GetDetails()
+			for _, jd := range job_m.Details {
+				jd.GetFile()
+				if jd.File.Size > 0 {
+					jd.Reset()
+				}
+			}
+		}
+
 		// add track
 		self.AddTrack(uid, pid, typ, false)
 		// issue-1, 上传用户要监控下载用户状态,上传完的要加入track
@@ -168,7 +198,6 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 				self.AddTrack(u_job.Uid, u_job.Pid, u_job.Type, false)
 			}
 		}
-		self.lock.Unlock()
 		return nil
 	}
 
@@ -221,6 +250,7 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 	}
 
 	self.lock.Lock()
+	defer self.lock.Unlock()
 	// add track
 	self.AddTrack(uid, pid, typ, false)
 	// issue-1, 上传用户要监控下载用户状态,上传完的要加入track
@@ -230,7 +260,6 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 			self.AddTrack(u_job.Uid, u_job.Pid, u_job.Type, false)
 		}
 	}
-	self.lock.Unlock()
 
 	return nil
 }
@@ -358,40 +387,35 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 	if j == nil {
 		return
 	}
-	jd := self.GetJobDetail(hashid, getFidFromTask(t))
+	jd := self.GetJobDetail(hashid, t.Fid)
 	if jd == nil {
 		return
 	}
 	if jd.File == nil {
 		jd.GetFile()
 	}
-	seg_rt := getSegRuntime(jd, sid)
+	// seg_rt := getSegRuntime(jd, sid)
 
 	// 更新JobDetails状态, 根据判断更新Job状态, 是否finished?
-	seg_rt.Size = state.TotalBytes
-	jd.Bitrate = state.Bitrate
-	force_save := false
+	// seg_rt.Size = state.TotalBytes
+	seg_state := 0
+	// jd.Bitrate = state.Bitrate
 
 	s := strings.ToLower(state.State)
 	switch s {
 	case "transferring":
-		seg_rt.State = cydex.TRANSFER_STATE_DOING
+		seg_state = cydex.TRANSFER_STATE_DOING
 	case "interrupted":
-		seg_rt.State = cydex.TRANSFER_STATE_PAUSE
+		seg_state = cydex.TRANSFER_STATE_PAUSE
 	case "end":
-		seg_rt.State = cydex.TRANSFER_STATE_DONE
+		seg_state = cydex.TRANSFER_STATE_DONE
 	default:
 		return
 	}
 
-	updateJobDetail(jd)
+	force_save := updateJobDetail(jd, state, seg_state)
 
-	// jd is finished
-	if jd.NumFinishedSegs == jd.File.NumSegs {
-		clog.Infof("%s is finished", jd)
-		jd.State = cydex.TRANSFER_STATE_DONE
-		jd.FinishTime = time.Now()
-		force_save = true
+	if jd.State == cydex.TRANSFER_STATE_DONE {
 		j.NumFinishedDetails++
 	}
 
@@ -400,7 +424,7 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 		clog.Infof("%s is finished", j)
 		j.SetState(cydex.TRANSFER_STATE_DONE)
 		self.lock.Lock()
-		delete(self.jobs, j.JobId) // 从表里删除
+		delete(self.jobs, j.JobId)
 		self.DelTrack(uid, pid, typ, false)
 		self.lock.Unlock()
 	}
@@ -408,10 +432,10 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 	//jzh: 将上传seg的发生变化的状态更新进数据库
 	if typ == cydex.UPLOAD {
 		seg_m, _ := models.GetSeg(sid)
-		clog.Tracef("sid:%s model_s:%d runtime_s:%d", sid, seg_m.State, seg_rt.State)
-		if seg_m != nil && seg_m.State != seg_rt.State {
-			clog.Trace(sid, "set state ", seg_rt.State)
-			seg_m.SetState(seg_rt.State)
+		// clog.Tracef("sid:%s model_s:%d runtime_s:%d", sid, seg_m.State, seg_rt.State)
+		if seg_m != nil && seg_m.State != seg_state {
+			// clog.Trace(sid, "set state ", seg_rt.State)
+			seg_m.SetState(seg_state)
 		}
 	}
 
@@ -693,4 +717,16 @@ func PkgIsTransferring(pid string, typ int) (bool, error) {
 		}
 	}
 	return false, nil
+}
+
+// 更新JD进度
+func UpdateJobDetailProcess(job_id, fid string, finished_size uint64, num_finished_segs int) {
+	jd := JobMgr.GetJobDetail(job_id, fid)
+	if jd == nil {
+		return
+	}
+	clog.Tracef("%s update process: %d %d", jd, finished_size, num_finished_segs)
+	jd.FinishedSize = finished_size
+	jd.NumFinishedSegs = num_finished_segs
+	jd.Save()
 }

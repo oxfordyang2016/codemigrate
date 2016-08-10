@@ -171,6 +171,9 @@ func Test_CreateJob(t *testing.T) {
 				So(jd.StartTime.IsZero(), ShouldBeTrue)
 				t := &task.Task{
 					TaskId: "t1",
+					Uid:    "1234567890ab",
+					Pid:    pid,
+					Fid:    fid1,
 					Type:   cydex.UPLOAD,
 					UploadReq: &task.UploadReq{
 						UploadTaskReq: &transfer.UploadTaskReq{
@@ -198,6 +201,9 @@ func Test_CreateJob(t *testing.T) {
 				}
 				t := &task.Task{
 					TaskId: "t1",
+					Uid:    "1234567890ab",
+					Pid:    pid,
+					Fid:    fid1,
 					Type:   cydex.UPLOAD,
 					UploadReq: &task.UploadReq{
 						UploadTaskReq: &transfer.UploadTaskReq{
@@ -211,6 +217,8 @@ func Test_CreateJob(t *testing.T) {
 				}
 				JobMgr.TaskStateNotify(t, state)
 				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_DOING)
+				So(jd.NumFinishedSegs, ShouldEqual, 0)
+				So(jd.FinishedSize, ShouldEqual, 0)
 			})
 
 			Convey("task end", func() {
@@ -225,6 +233,9 @@ func Test_CreateJob(t *testing.T) {
 				}
 				t := &task.Task{
 					TaskId: "t1",
+					Uid:    "1234567890ab",
+					Pid:    pid,
+					Fid:    fid1,
 					Type:   cydex.UPLOAD,
 					UploadReq: &task.UploadReq{
 						UploadTaskReq: &transfer.UploadTaskReq{
@@ -243,7 +254,7 @@ func Test_CreateJob(t *testing.T) {
 			})
 
 			Convey("job end", func() {
-				So(j.State, ShouldEqual, cydex.TRANSFER_STATE_IDLE)
+				So(j.State, ShouldNotEqual, cydex.TRANSFER_STATE_DONE)
 
 				jd := JobMgr.GetJobDetail(j.JobId, fid2)
 				state := &transfer.TaskState{
@@ -255,6 +266,9 @@ func Test_CreateJob(t *testing.T) {
 				}
 				t := &task.Task{
 					TaskId: "t2",
+					Uid:    "1234567890ab",
+					Pid:    pid,
+					Fid:    fid2,
 					Type:   cydex.UPLOAD,
 					UploadReq: &task.UploadReq{
 						UploadTaskReq: &transfer.UploadTaskReq{

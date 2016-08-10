@@ -11,6 +11,7 @@ import (
 	"github.com/astaxie/beego"
 	clog "github.com/cihub/seelog"
 	"io/ioutil"
+	"strconv"
 	"time"
 )
 
@@ -46,6 +47,7 @@ func (self *TransferController) Post() {
 		rsp.Error = cydex.ErrInvalidParam
 		return
 	}
+	req.FinishedSize, _ = strconv.ParseUint(req.FinishedSizeStr, 10, 64)
 
 	if len(req.SegIds) == 0 || req.Fid == "" {
 		clog.Error("invalid param")
@@ -76,6 +78,11 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 		Fid:     req.Fid,
 		SidList: req.SegIds,
 	}
+
+	// update jd process
+	jobid := pkg.HashJob(uid, pid, cydex.DOWNLOAD)
+	pkg.UpdateJobDetailProcess(jobid, req.Fid, req.FinishedSize, req.NumFinishedSegs)
+
 	// get storages
 	for _, sid := range req.SegIds {
 		seg, _ := pkg_model.GetSeg(sid)
@@ -85,8 +92,6 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 		}
 		task_req.DownloadTaskReq.SidStorage = append(task_req.DownloadTaskReq.SidStorage, storage)
 	}
-
-	clog.Trace("yyyyyyyyy")
 
 	task_rsp, node, err := task.TaskMgr.DispatchDownload(task_req, DISPATCH_TIMEOUT)
 	if err != nil || node == nil || task_rsp == nil {
@@ -106,6 +111,9 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 			seg.SetSize(seg_m.Size)
 			seg.Status = seg_m.State
 			rsp.Segs = append(rsp.Segs, seg)
+		}
+		if rsp.Segs == nil {
+			rsp.Segs = make([]*cydex.Seg, 0)
 		}
 	}
 }
@@ -159,6 +167,9 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 			seg.SetSize(seg_m.Size)
 			seg.Status = seg_m.State
 			rsp.Segs = append(rsp.Segs, seg)
+		}
+		if rsp.Segs == nil {
+			rsp.Segs = make([]*cydex.Seg, 0)
 		}
 	}
 }

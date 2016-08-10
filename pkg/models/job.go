@@ -216,6 +216,14 @@ func (self *Job) SoftDelete(tag int) (err error) {
 	return err
 }
 
+// 复位, 重新开始
+func (self *Job) Reset() (err error) {
+	self.State = cydex.TRANSFER_STATE_IDLE
+	self.FinishAt = time.Time{}
+	_, err = DB().Where("job_id=?", self.JobId).Cols("state", "finish_at").Update(self)
+	return
+}
+
 func (self *Job) String() string {
 	return fmt.Sprintf("<Job(%s)", self.JobId)
 }
@@ -339,6 +347,16 @@ func (self *JobDetail) Finish() error {
 func (self *JobDetail) Save() error {
 	_, err := DB().Id(self.Id).AllCols().Update(self)
 	return err
+}
+
+// 因为任务完成后可以重新开始
+func (self *JobDetail) Reset() error {
+	self.State = cydex.TRANSFER_STATE_IDLE
+	self.StartTime = time.Time{}
+	self.FinishTime = time.Time{}
+	self.FinishedSize = 0
+	self.Checked = 0
+	return self.Save()
 }
 
 func (self *JobDetail) TableName() string {
