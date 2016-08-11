@@ -51,9 +51,22 @@ func GetJob(jobid string, with_pkg bool) (*Job, error) {
 		return nil, nil
 	}
 	if with_pkg {
-		err = j.GetPkg(false)
+		err = j.GetPkg(true)
 	}
 	return j, err
+}
+
+func GetJobs(typ int, p *cydex.Pagination) ([]*Job, error) {
+	jobs := make([]*Job, 0)
+	var err error
+	sess := DB().Where("type=? and soft_del=0", typ)
+	if p != nil {
+		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
+	}
+	if err = sess.Find(&jobs); err != nil {
+		return nil, err
+	}
+	return jobs, nil
 }
 
 func GetJobsByUid(uid string, typ int, p *cydex.Pagination) ([]*Job, error) {
@@ -69,10 +82,13 @@ func GetJobsByUid(uid string, typ int, p *cydex.Pagination) ([]*Job, error) {
 	return jobs, nil
 }
 
-func GetJobsByPid(pid string, typ int) ([]*Job, error) {
+func GetJobsByPid(pid string, typ int, p *cydex.Pagination) ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	var err error
 	sess := DB().Where("pid=? and type=? and soft_del=0", pid, typ)
+	if p != nil {
+		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
+	}
 	if err = sess.Find(&jobs); err != nil {
 		return nil, err
 	}

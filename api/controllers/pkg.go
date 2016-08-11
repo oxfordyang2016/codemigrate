@@ -8,7 +8,6 @@ import (
 	// "fmt"
 	"./../../transfer/task"
 	"errors"
-	"github.com/astaxie/beego"
 	clog "github.com/cihub/seelog"
 	"io/ioutil"
 	"strconv"
@@ -57,11 +56,11 @@ func aggregate(pkg_m *pkg_model.Pkg) (pkg_c *cydex.Pkg, err error) {
 	}
 
 	// 根据pid获取下载该pkg的信息
-	download_jobs, err := pkg_model.GetJobsByPid(pkg_m.Pid, cydex.DOWNLOAD)
+	download_jobs, err := pkg_model.GetJobsByPid(pkg_m.Pid, cydex.DOWNLOAD, nil)
 	if err != nil {
 		return nil, err
 	}
-	upload_jobs, err := pkg_model.GetJobsByPid(pkg_m.Pid, cydex.UPLOAD)
+	upload_jobs, err := pkg_model.GetJobsByPid(pkg_m.Pid, cydex.UPLOAD, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +131,7 @@ func aggregate(pkg_m *pkg_model.Pkg) (pkg_c *cydex.Pkg, err error) {
 
 // 包控制器
 type PkgsController struct {
-	beego.Controller
+	BaseController
 }
 
 func (self *PkgsController) Get() {
@@ -158,6 +157,59 @@ func (self *PkgsController) Get() {
 	case "receiver":
 		// 3.1
 		self.getJobs(cydex.DOWNLOAD)
+	case "admin":
+		// 3.1
+		self.getAllJobs()
+	}
+}
+
+func (self *PkgsController) getAllJobs() {
+	// uid := self.GetString(":uid")
+	page := new(cydex.Pagination)
+	page.PageSize, _ = self.GetInt("page_size")
+	page.PageNum, _ = self.GetInt("page_num")
+	if !page.Verify() {
+		page = nil
+	}
+
+	rsp := new(cydex.QueryPkgRsp)
+	rsp.Error = cydex.OK
+
+	defer func() {
+		if rsp.Pkgs == nil {
+			rsp.Pkgs = make([]*cydex.Pkg, 0)
+		}
+		self.Data["json"] = rsp
+		self.ServeJSON()
+	}()
+
+	// 非admin用户无权限
+	if self.UserLevel != cydex.USER_LEVEL_ADMIN {
+		rsp.Error = cydex.ErrNotAllowed
+		return
+	}
+
+	jobs, err := pkg_model.GetJobs(cydex.UPLOAD, page)
+	if err != nil {
+		// error
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+
+	for _, job := range jobs {
+		if err = job.GetPkg(true); err != nil {
+			// error
+			rsp.Error = cydex.ErrInnerServer
+			return
+		}
+
+		pkg_c, err := aggregate(job.Pkg)
+		if err != nil {
+			rsp.Error = cydex.ErrInnerServer
+			return
+		}
+
+		rsp.Pkgs = append(rsp.Pkgs, pkg_c)
 	}
 }
 
@@ -169,15 +221,22 @@ func (self *PkgsController) getJobs(typ int) {
 	if !page.Verify() {
 		page = nil
 	}
-	// TODO 判断是否是admin
-	// 目前是普通用户处理
+
 	rsp := new(cydex.QueryPkgRsp)
 	rsp.Error = cydex.OK
 
 	defer func() {
+		if rsp.Pkgs == nil {
+			rsp.Pkgs = make([]*cydex.Pkg, 0)
+		}
 		self.Data["json"] = rsp
 		self.ServeJSON()
 	}()
+
+	// admin返回空
+	if self.UserLevel == cydex.USER_LEVEL_ADMIN {
+		return
+	}
 
 	// 按照uid和type得到和用户相关的jobs
 	jobs, err := pkg_model.GetJobsByUid(uid, typ, page)
@@ -214,6 +273,11 @@ func (self *PkgsController) getActive() {
 		self.ServeJSON()
 	}()
 
+	// jzh: 管理员不实现该接口
+	if self.UserLevel == cydex.USER_LEVEL_ADMIN {
+		return
+	}
+
 	// upload
 	{
 		jobs, err := pkg.JobMgr.GetJobsByUid(uid, cydex.UPLOAD)
@@ -224,8 +288,10 @@ func (self *PkgsController) getActive() {
 		}
 
 		for _, job_m := range jobs {
-			if job_m.Pkg == nil {
+			if job_m.Pkg == nil || job_m.Pkg.Files == nil {
 				// err
+				rsp.Error = cydex.ErrInnerServer
+				return
 			}
 			pkg_u := new(cydex.PkgUpload)
 			pkg_u.Pid = job_m.Pid
@@ -267,8 +333,10 @@ func (self *PkgsController) getActive() {
 			return
 		}
 		for _, job_m := range jobs {
-			if job_m.Pkg == nil {
+			if job_m.Pkg == nil || job_m.Pkg.Files == nil {
 				// err
+				rsp.Error = cydex.ErrInnerServer
+				return
 			}
 			pkg_d := new(cydex.PkgDownload)
 			pkg_d.Pid = job_m.Pid
@@ -332,6 +400,9 @@ func (self *PkgsController) getLitePkgs() {
 	rsp := new(cydex.QueryPkgLiteRsp)
 
 	defer func() {
+		if rsp.Pkgs == nil {
+			rsp.Pkgs = make([]*cydex.PkgLite, 0)
+		}
 		self.Data["json"] = rsp
 		self.ServeJSON()
 	}()
@@ -343,7 +414,22 @@ func (self *PkgsController) getLitePkgs() {
 
 	switch query {
 	case "admin":
-		pkgs, err = pkg_model.GetPkgs()
+		if self.UserLevel != cydex.USER_LEVEL_ADMIN {
+			rsp.Error = cydex.ErrNotAllowed
+			return
+		}
+		jobs, err := pkg_model.GetJobs(cydex.UPLOAD, nil)
+		if err != nil {
+			clog.Error(err)
+			rsp.Error = cydex.ErrInnerServer
+			return
+		}
+		for _, j := range jobs {
+			if j.Pkg == nil {
+				j.GetPkg(false)
+			}
+			pkgs = append(pkgs, j.Pkg)
+		}
 	case "sender":
 		jobs, err := pkg_model.GetJobsByUid(uid, cydex.UPLOAD, nil)
 		if err != nil {
@@ -390,9 +476,6 @@ func (self *PkgsController) getLitePkgs() {
 			NumFiles: int(p.NumFiles),
 		})
 	}
-	if rsp.Pkgs == nil {
-		rsp.Pkgs = make([]*cydex.PkgLite, 0)
-	}
 }
 
 func (self *PkgsController) Post() {
@@ -403,6 +486,12 @@ func (self *PkgsController) Post() {
 		self.Data["json"] = rsp
 		self.ServeJSON()
 	}()
+
+	if self.UserLevel == cydex.USER_LEVEL_ADMIN {
+		clog.Error("admin not allowed to create pkg")
+		rsp.Error = cydex.ErrNotAllowed
+		return
+	}
 
 	// 获取拆包器
 	unpacker := pkg.GetUnpacker()
@@ -556,7 +645,7 @@ func (self *PkgsController) createPkg(req *cydex.CreatePkgReq, rsp *cydex.Create
 
 // 单包控制器
 type PkgController struct {
-	beego.Controller
+	BaseController
 }
 
 func (self *PkgController) Get() {
@@ -570,11 +659,22 @@ func (self *PkgController) Get() {
 	uid := self.GetString(":uid")
 	pid := self.GetString(":pid")
 
-	types := []int{cydex.UPLOAD, cydex.DOWNLOAD}
-	for _, t := range types {
-		hashid := pkg.HashJob(uid, pid, t)
-		job, err := pkg_model.GetJob(hashid, true)
-		if err == nil && job != nil {
+	if self.UserLevel != cydex.USER_LEVEL_ADMIN {
+		types := []int{cydex.UPLOAD, cydex.DOWNLOAD}
+		for _, t := range types {
+			hashid := pkg.HashJob(uid, pid, t)
+			job, err := pkg_model.GetJob(hashid, true)
+			if err == nil && job != nil {
+				rsp.Pkg, _ = aggregate(job.Pkg)
+			}
+		}
+	} else {
+		// 管理员用户
+		clog.Trace("admin get pkg")
+		jobs, _ := pkg_model.GetJobsByPid(pid, cydex.UPLOAD, nil)
+		if len(jobs) > 0 {
+			job := jobs[0]
+			job.GetPkg(true)
 			rsp.Pkg, _ = aggregate(job.Pkg)
 		}
 	}
@@ -607,10 +707,20 @@ func (self *PkgController) Put() {
 		rsp.Error = cydex.ErrInvalidParam
 		return
 	}
+	var job_m *pkg_model.Job
 
-	hashid := pkg.HashJob(uid, pid, cydex.UPLOAD)
-	job_m, err := pkg_model.GetJob(hashid, false)
-	clog.Tracef("%+v", job_m)
+	if self.UserLevel != cydex.USER_LEVEL_ADMIN {
+		hashid := pkg.HashJob(uid, pid, cydex.UPLOAD)
+		job_m, err = pkg_model.GetJob(hashid, false)
+	} else {
+		// admin
+		clog.Trace("admin put pkg")
+		jobs, _ := pkg_model.GetJobsByPid(pid, cydex.UPLOAD, nil)
+		if len(jobs) > 0 {
+			job_m = jobs[0]
+			job_m.GetPkg(true)
+		}
+	}
 	if err != nil {
 		clog.Error(err)
 		rsp.Error = cydex.ErrInvalidParam
@@ -620,6 +730,7 @@ func (self *PkgController) Put() {
 		rsp.Error = cydex.ErrPackageNotExisted
 		return
 	}
+	clog.Tracef("%+v", job_m)
 	job_m.GetPkg(true)
 
 	// add
@@ -657,14 +768,29 @@ func (self *PkgController) Delete() {
 		self.ServeJSON()
 	}()
 
-	hashid := pkg.HashJob(uid, pid, cydex.UPLOAD)
-	clog.Trace(hashid)
-	job_m, _ := pkg_model.GetJob(hashid, true)
+	var job_m *pkg_model.Job
+	var err error
+
+	// 判断是否有此包
+	if self.UserLevel != cydex.USER_LEVEL_ADMIN {
+		hashid := pkg.HashJob(uid, pid, cydex.UPLOAD)
+		clog.Trace(hashid)
+		job_m, _ = pkg_model.GetJob(hashid, true)
+	} else {
+		// admin
+		clog.Trace("admin delete pkg")
+		jobs, _ := pkg_model.GetJobsByPid(pid, cydex.UPLOAD, nil)
+		if len(jobs) > 0 {
+			job_m = jobs[0]
+			job_m.GetPkg(true)
+		}
+	}
 	if job_m == nil || job_m.Pkg == nil {
-		clog.Trace("here 000000000")
 		rsp.Error = cydex.ErrPackageNotExisted
 		return
 	}
+
+	// 是否在传输
 	transferring, err := pkg.PkgIsTransferring(pid, cydex.UPLOAD)
 	if err != nil {
 		rsp.Error = cydex.ErrInnerServer
@@ -687,18 +813,24 @@ func (self *PkgController) Delete() {
 	//上传Job软删除
 	job_m.SoftDelete(pkg_model.SOFT_DELETE_TAG)
 	// 下载Job真删除
-	download_jobs, _ := pkg_model.GetJobsByPid(pid, cydex.DOWNLOAD)
+	download_jobs, _ := pkg_model.GetJobsByPid(pid, cydex.DOWNLOAD, nil)
 	for _, j := range download_jobs {
-		pkg_model.DeleteJob(j.JobId)
+		// pkg_model.DeleteJob(j.JobId)
+
+		// delete resource in cache and db
+		if err := pkg.JobMgr.DeleteJob(j.Uid, pid, cydex.DOWNLOAD); err != nil {
+			clog.Error(err)
+			continue
+		}
 		// delete cache
-		pkg.JobMgr.DelTrack(j.Uid, j.Pid, j.Type, true)
+		// pkg.JobMgr.DelTrack(j.Uid, j.Pid, j.Type, true)
 	}
 	// TODO 删除文件, 释放空间
 }
 
 // 单文件控制器
 type FileController struct {
-	beego.Controller
+	BaseController
 }
 
 func (self *FileController) Get() {
@@ -733,7 +865,7 @@ func (self *FileController) Get() {
 			file.Chara = file_m.EigenValue
 			file.PathAbs = file_m.PathAbs
 
-			uploads_jobs, err := pkg_model.GetJobsByPid(pid, cydex.UPLOAD)
+			uploads_jobs, err := pkg_model.GetJobsByPid(pid, cydex.UPLOAD, nil)
 			if err != nil {
 				rsp.Error = cydex.ErrInnerServer
 				return
@@ -765,7 +897,7 @@ func (self *FileController) Get() {
 			file.Chara = file_m.EigenValue
 			file.PathAbs = file_m.PathAbs
 
-			download_jobs, err := pkg_model.GetJobsByPid(pid, cydex.DOWNLOAD)
+			download_jobs, err := pkg_model.GetJobsByPid(pid, cydex.DOWNLOAD, nil)
 			if err != nil {
 				rsp.Error = cydex.ErrInnerServer
 				return

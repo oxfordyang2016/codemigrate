@@ -8,7 +8,7 @@ import (
 	"cydex"
 	"cydex/transfer"
 	"encoding/json"
-	"github.com/astaxie/beego"
+	// "github.com/astaxie/beego"
 	clog "github.com/cihub/seelog"
 	"io/ioutil"
 	"strconv"
@@ -20,14 +20,27 @@ const (
 )
 
 type TransferController struct {
-	beego.Controller
+	BaseController
+}
+
+func canUpload(user_level int) (ret bool) {
+	if user_level == cydex.USER_LEVEL_COMMON || user_level == cydex.USER_LEVEL_UPLOAD_ONLY {
+		ret = true
+	}
+	return
+}
+
+func canDownload(user_level int) (ret bool) {
+	if user_level == cydex.USER_LEVEL_COMMON || user_level == cydex.USER_LEVEL_DOWNLOAD_ONLY {
+		ret = true
+	}
+	return
 }
 
 func (self *TransferController) Post() {
 	req := new(cydex.TransferReq)
 	rsp := new(cydex.TransferRsp)
 
-	clog.Trace("transfer")
 	defer func() {
 		self.Data["json"] = rsp
 		self.ServeJSON()
@@ -40,7 +53,7 @@ func (self *TransferController) Post() {
 		rsp.Error = cydex.ErrInvalidParam
 		return
 	}
-	clog.Trace(string(body))
+	clog.Trace("transfer ", string(body))
 	// 获取请求
 	if err := json.Unmarshal(body, req); err != nil {
 		clog.Error(err)
@@ -57,8 +70,18 @@ func (self *TransferController) Post() {
 
 	switch req.From {
 	case "receiver":
+		if !canDownload(self.UserLevel) {
+			clog.Errorf("user level:%d not allowed to download", self.UserLevel)
+			rsp.Error = cydex.ErrNotAllowed
+			break
+		}
 		self.processDownload(req, rsp)
 	case "sender":
+		if !canUpload(self.UserLevel) {
+			clog.Errorf("user level:%d not allowed to upload", self.UserLevel)
+			rsp.Error = cydex.ErrNotAllowed
+			break
+		}
 		self.processUpload(req, rsp)
 	default:
 		rsp.Error = cydex.ErrInvalidParam

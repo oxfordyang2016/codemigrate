@@ -193,7 +193,7 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 		self.AddTrack(uid, pid, typ, false)
 		// issue-1, 上传用户要监控下载用户状态,上传完的要加入track
 		if typ == cydex.DOWNLOAD {
-			upload_jobs, _ := models.GetJobsByPid(pid, cydex.UPLOAD)
+			upload_jobs, _ := models.GetJobsByPid(pid, cydex.UPLOAD, nil)
 			for _, u_job := range upload_jobs {
 				self.AddTrack(u_job.Uid, u_job.Pid, u_job.Type, false)
 			}
@@ -255,7 +255,7 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 	self.AddTrack(uid, pid, typ, false)
 	// issue-1, 上传用户要监控下载用户状态,上传完的要加入track
 	if typ == cydex.DOWNLOAD {
-		upload_jobs, _ := models.GetJobsByPid(pid, cydex.UPLOAD)
+		upload_jobs, _ := models.GetJobsByPid(pid, cydex.UPLOAD, nil)
 		for _, u_job := range upload_jobs {
 			self.AddTrack(u_job.Uid, u_job.Pid, u_job.Type, false)
 		}
@@ -621,7 +621,7 @@ func (self *JobManager) LoadTracks() error {
 		self.AddTrack(j.Uid, j.Pid, j.Type, false)
 		// issue-1, 上传用户要监控下载用户状态,上传完的要加入track
 		if j.Type == cydex.DOWNLOAD {
-			upload_jobs, _ := models.GetJobsByPid(j.Pid, cydex.UPLOAD)
+			upload_jobs, _ := models.GetJobsByPid(j.Pid, cydex.UPLOAD, nil)
 			for _, u_job := range upload_jobs {
 				self.AddTrack(u_job.Uid, u_job.Pid, u_job.Type, false)
 			}
@@ -706,7 +706,7 @@ func PkgIsTransferring(pid string, typ int) (bool, error) {
 		return false, err
 	}
 	if jobs == nil {
-		jobs, err = models.GetJobsByPid(pid, typ)
+		jobs, err = models.GetJobsByPid(pid, typ, nil)
 		if err != nil {
 			return false, err
 		}
