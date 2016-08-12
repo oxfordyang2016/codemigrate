@@ -443,7 +443,10 @@ func (self *Node) Close(close_conn bool) {
 func (self *Node) String() string {
 	nid := ""
 	if self.Node != nil {
-		nid = self.Node.Nid[:8]
+		nid = self.Node.Nid
+		if len(nid) > 8 {
+			nid = nid[:8]
+		}
 	}
 	return fmt.Sprintf("<Node(%s %s)>", nid, self.Host)
 }
