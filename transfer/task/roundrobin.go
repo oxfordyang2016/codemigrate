@@ -55,8 +55,8 @@ func (self *RoundRobinUploadScheduler) AddNode(n *trans.Node) {
 
 func (self *RoundRobinUploadScheduler) DelNode(n *trans.Node) {
 	// 删除失去连接的node
-	defer self.lock.Unlock()
 	self.lock.Lock()
+	defer self.lock.Unlock()
 
 	for e := self.node_queue.Front(); e != nil; e = e.Next() {
 		if e.Value == n {

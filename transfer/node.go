@@ -81,9 +81,9 @@ func (self *NodeManager) GetByNid(id string) *Node {
 }
 
 func (self *NodeManager) AddNode(node *Node) {
-	clog.Infof("Node Add: %+v\n", node)
-	defer self.mux.Unlock()
+	clog.Infof("Node Add: %+v", node)
 	self.mux.Lock()
+	defer self.mux.Unlock()
 	self.id_map[node.Nid] = node
 	for _, o := range self.observers {
 		o.AddNode(node)
@@ -92,8 +92,8 @@ func (self *NodeManager) AddNode(node *Node) {
 
 func (self *NodeManager) DelNode(nid string) {
 	clog.Infof("Node Delete: %s\n", nid)
-	defer self.mux.Unlock()
 	self.mux.Lock()
+	defer self.mux.Unlock()
 	node, ok := self.id_map[nid]
 	if ok {
 		delete(self.id_map, nid)
@@ -443,7 +443,7 @@ func (self *Node) Close(close_conn bool) {
 func (self *Node) String() string {
 	nid := ""
 	if self.Node != nil {
-		nid = self.Node.Nid
+		nid = self.Node.Nid[:8]
 	}
 	return fmt.Sprintf("<Node(%s %s)>", nid, self.Host)
 }

@@ -13,7 +13,7 @@ import (
 func Test_XidResource(t *testing.T) {
 	Convey("Test XidResource", t, func() {
 		X := NewXidResource()
-		X.Add("x1", trans.NewNode(nil, nil), 1*time.Second)
+		X.Add("x1", "n1", 1*time.Second)
 		So(X.Len(), ShouldEqual, 1)
 		time.Sleep(5)
 		X.DelExpired()
@@ -34,10 +34,11 @@ func Test_RestrictUploadScheduler(t *testing.T) {
 					Nid: "n1",
 				},
 			}
+			trans.NodeMgr.AddNode(node)
 			t1 := &Task{
 				TaskId: "t0",
 				Type:   cydex.UPLOAD,
-				Node:   node,
+				Nid:    "n1",
 				UploadReq: &UploadReq{
 					UploadTaskReq: &transfer.UploadTaskReq{
 						TaskId: "t1",
@@ -81,10 +82,11 @@ func Test_RestrictUploadScheduler(t *testing.T) {
 					Nid: "n1",
 				},
 			}
+			trans.NodeMgr.AddNode(node)
 			t1 := &Task{
 				TaskId: "t0",
 				Type:   cydex.UPLOAD,
-				Node:   node,
+				Nid:    "n1",
 				UploadReq: &UploadReq{
 					UploadTaskReq: &transfer.UploadTaskReq{
 						TaskId: "t0",
@@ -117,10 +119,11 @@ func Test_RestrictUploadScheduler(t *testing.T) {
 					FreeStorage: 128,
 				},
 			}
+			trans.NodeMgr.AddNode(node)
 			t1 := &Task{
 				TaskId: "t0",
 				Type:   cydex.UPLOAD,
-				Node:   node,
+				Nid:    "n1",
 				UploadReq: &UploadReq{
 					UploadTaskReq: &transfer.UploadTaskReq{
 						TaskId: "t0",

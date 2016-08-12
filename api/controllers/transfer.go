@@ -89,32 +89,58 @@ func (self *TransferController) Post() {
 	}
 }
 
-func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cydex.TransferRsp) {
-	clog.Trace("download")
-	uid := self.GetString(":uid")
-	pid := pkg.GetUnpacker().GetPidFromFid(req.Fid)
+func buildTaskDownloadReq(uid, pid, fid string, sids []string) *task.DownloadReq {
 	task_req := new(task.DownloadReq)
 	task_req.DownloadTaskReq = &transfer.DownloadTaskReq{
 		TaskId:  task.GenerateTaskId(),
 		Uid:     uid,
 		Pid:     pid,
-		Fid:     req.Fid,
-		SidList: req.SegIds,
+		Fid:     fid,
+		SidList: sids,
 	}
+
+	var sid_storage []string
+	for _, sid := range sids {
+		seg, _ := pkg_model.GetSeg(sid)
+		storage := ""
+		if seg != nil {
+			storage = seg.Storage
+		}
+		sid_storage = append(sid_storage, storage)
+	}
+	task_req.DownloadTaskReq.SidStorage = sid_storage
+
+	return task_req
+}
+
+func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cydex.TransferRsp) {
+	clog.Trace("download")
+	uid := self.GetString(":uid")
+	pid := pkg.GetUnpacker().GetPidFromFid(req.Fid)
 
 	// update jd process
 	jobid := pkg.HashJob(uid, pid, cydex.DOWNLOAD)
 	pkg.UpdateJobDetailProcess(jobid, req.Fid, req.FinishedSize, req.NumFinishedSegs)
 
 	// get storages
-	for _, sid := range req.SegIds {
-		seg, _ := pkg_model.GetSeg(sid)
-		storage := ""
-		if seg != nil {
-			storage = seg.Storage
-		}
-		task_req.DownloadTaskReq.SidStorage = append(task_req.DownloadTaskReq.SidStorage, storage)
-	}
+	task_req := buildTaskDownloadReq(uid, pid, req.Fid, req.SegIds)
+	// task_req := new(task.DownloadReq)
+	// task_req.DownloadTaskReq = &transfer.DownloadTaskReq{
+	// 	TaskId:  task.GenerateTaskId(),
+	// 	Uid:     uid,
+	// 	Pid:     pid,
+	// 	Fid:     req.Fid,
+	// 	SidList: req.SegIds,
+	// }
+	// // get storages
+	// for _, sid := range req.SegIds {
+	// 	seg, _ := pkg_model.GetSeg(sid)
+	// 	storage := ""
+	// 	if seg != nil {
+	// 		storage = seg.Storage
+	// 	}
+	// 	task_req.DownloadTaskReq.SidStorage = append(task_req.DownloadTaskReq.SidStorage, storage)
+	// }
 
 	task_rsp, node, err := task.TaskMgr.DispatchDownload(task_req, DISPATCH_TIMEOUT)
 	if err != nil || node == nil || task_rsp == nil {

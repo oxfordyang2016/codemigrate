@@ -80,10 +80,13 @@ func (self *RestrictUploadScheduler) DispatchUpload(req *UploadReq) (n *trans.No
 
 	self.resource.DelExpired()
 	r := self.resource.Get(self.getId(req))
-	if r != nil && r.node != nil {
-		if r.node.Info.FreeStorage >= req.Size {
-			r.Update()
-			n = r.node
+	if r != nil && r.nid != "" {
+		node := trans.NodeMgr.GetByNid(r.nid)
+		if node != nil {
+			if node.Info.FreeStorage >= req.Size {
+				r.Update()
+				n = node
+			}
 		}
 	}
 	return
@@ -95,11 +98,11 @@ func (self *RestrictUploadScheduler) AddTask(t *Task) {
 		return
 	}
 
-	defer self.lock.Unlock()
 	self.lock.Lock()
+	defer self.lock.Unlock()
 
 	xid := self.getId(t.UploadReq)
-	self.resource.Add(xid, t.Node, DEFAULT_RESOUCE_EXPIRE)
+	self.resource.Add(xid, t.Nid, DEFAULT_RESOUCE_EXPIRE)
 }
 
 func (self *RestrictUploadScheduler) DelTask(t *Task) {
@@ -117,12 +120,12 @@ func (self *RestrictUploadScheduler) TaskStateNotify(t *Task, state *transfer.Ta
 	defer self.lock.Unlock()
 	self.lock.Lock()
 
-	// xid := self.getId(t.UploadReq)
-	// self.resource.Update(xid, t.Node)
+	xid := self.getId(t.UploadReq)
+	self.resource.Update(xid, t.Nid)
 }
 
 type Resource struct {
-	node      *trans.Node
+	nid       string
 	timestamp time.Time
 	expire    time.Duration
 }
@@ -131,7 +134,7 @@ func (self *Resource) Update() {
 	self.timestamp = time.Now()
 }
 
-// 各约束都是Xid->Node的关系
+// 各约束都是Xid->Nid(Node)的关系
 // 这些关系会过期, 例如pkg或者file传输完毕,这里不侦测具体是否完毕,通过超时来释放资源
 type XidResource struct {
 	maps map[string]*Resource
@@ -143,29 +146,29 @@ func NewXidResource() *XidResource {
 	return n
 }
 
-func (self *XidResource) Add(xid string, n *trans.Node, expire time.Duration) {
-	if n == nil {
+func (self *XidResource) Add(xid string, nid string, expire time.Duration) {
+	if nid == "" {
 		return
 	}
-	self.Update(xid, n)
+	self.Update(xid, nid)
 	self.DelExpired()
 
 	// add new
 	r := &Resource{
-		node:      n,
+		nid:       nid,
 		timestamp: time.Now(),
 		expire:    expire,
 	}
 	self.maps[xid] = r
 }
 
-func (self *XidResource) Update(xid string, n *trans.Node) {
-	if n == nil {
+func (self *XidResource) Update(xid string, nid string) {
+	if nid == "" {
 		return
 	}
 	r := self.maps[xid]
 	// 如果有则更新timestamp
-	if r != nil && r.node == n {
+	if r != nil && r.nid == nid {
 		r.Update()
 	}
 }

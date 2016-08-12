@@ -4,6 +4,7 @@ import (
 	"./../../pkg"
 	pkg_model "./../../pkg/models"
 	"cydex"
+	"cydex/transfer"
 	"encoding/json"
 	// "fmt"
 	"./../../transfer/task"
@@ -756,7 +757,7 @@ func (self *PkgController) Put() {
 	rsp.Pkg, _ = aggregate(job_m.Pkg)
 }
 
-// TODO 删除包裹
+// TODO 删除包裹, 释放空间
 func (self *PkgController) Delete() {
 	uid := self.GetString(":uid")
 	pid := self.GetString(":pid")
@@ -769,7 +770,6 @@ func (self *PkgController) Delete() {
 	}()
 
 	var job_m *pkg_model.Job
-	var err error
 
 	// 判断是否有此包
 	if self.UserLevel != cydex.USER_LEVEL_ADMIN {
@@ -815,17 +815,76 @@ func (self *PkgController) Delete() {
 	// 下载Job真删除
 	download_jobs, _ := pkg_model.GetJobsByPid(pid, cydex.DOWNLOAD, nil)
 	for _, j := range download_jobs {
-		// pkg_model.DeleteJob(j.JobId)
-
 		// delete resource in cache and db
 		if err := pkg.JobMgr.DeleteJob(j.Uid, pid, cydex.DOWNLOAD); err != nil {
 			clog.Error(err)
 			continue
 		}
-		// delete cache
-		// pkg.JobMgr.DelTrack(j.Uid, j.Pid, j.Type, true)
 	}
-	// TODO 删除文件, 释放空间
+
+	go deletePkg(job_m)
+}
+
+func deletePkg(job *pkg_model.Job) {
+	// 删除文件, 释放空间
+	if job == nil {
+		return
+	}
+	if job.Pkg.Files == nil {
+		job.Pkg.GetFiles(true)
+	}
+	pid := job.Pid
+	c := make(chan int)
+	const timeout = 5 * time.Second
+
+	for _, file := range job.Pkg.Files {
+		// async job
+		go func() {
+			// 注意循环参数'file'对闭包的影响
+			file := file
+			defer func() {
+				c <- 1
+			}()
+			if file.Size == 0 {
+				return
+			}
+			file.GetSegs()
+			var sids []string
+			for _, seg := range file.Segs {
+				sids = append(sids, seg.Sid)
+			}
+			if sids == nil {
+				return
+			}
+			task_req := buildTaskDownloadReq(job.Uid, pid, file.Fid, sids)
+			clog.Tracef("%+v", task_req)
+			node, err := task.TaskMgr.Scheduler().DispatchDownload(task_req)
+			if node != nil {
+				// 发送协议
+				msg := transfer.NewReqMessage("", "removefile", "", 0)
+				msg.Req.RemoveFile = &transfer.RemoveFileReq{
+					RemoveId:   "",
+					Uid:        job.Uid,
+					Pid:        pid,
+					Fid:        file.Fid,
+					SidList:    sids,
+					SidStorage: task_req.DownloadTaskReq.SidStorage,
+				}
+				clog.Tracef("%+v", msg.Req.RemoveFile)
+				if _, err = node.SendRequestSync(msg, timeout); err != nil {
+					// clog.Error("")
+					return
+				}
+			}
+		}()
+	}
+
+	// wait delete job over
+	for i := 0; i < len(job.Pkg.Files); i++ {
+		<-c
+	}
+
+	job.SoftDelete(pkg_model.SOFT_DELETE_FILES_REMOVED)
 }
 
 // 单文件控制器

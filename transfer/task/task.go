@@ -79,7 +79,7 @@ type Task struct {
 	SegsState   map[string]*transfer.TaskState
 	CreateAt    time.Time
 	UpdateAt    time.Time
-	Node        *trans.Node // 该任务分配的传输节点
+	Nid         string
 }
 
 func NewTask(msg *transfer.Message) *Task {
@@ -118,7 +118,7 @@ func NewTask(msg *transfer.Message) *Task {
 }
 
 func (self *Task) IsDispatched() bool {
-	return self.Node != nil
+	return self.Nid != ""
 }
 
 func (self *Task) Stop() {
@@ -133,8 +133,11 @@ func (self *Task) Stop() {
 	msg.Req.StopTask = &transfer.StopTaskReq{
 		TaskId: self.TaskId,
 	}
-	if _, err := self.Node.SendRequestSync(msg, timeout); err != nil {
-		return
+	node := trans.NodeMgr.GetByNid(self.Nid)
+	if node != nil {
+		if _, err := node.SendRequestSync(msg, timeout); err != nil {
+			return
+		}
 	}
 }
 
@@ -276,7 +279,7 @@ func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (
 
 	t := NewTask(msg)
 	t.UploadReq = req
-	t.Node = node
+	t.Nid = node.Nid
 	TaskMgr.AddTask(t)
 	return
 }
@@ -310,7 +313,7 @@ func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duratio
 
 	t := NewTask(msg)
 	t.DownloadReq = req
-	t.Node = node
+	t.Nid = node.Nid
 	TaskMgr.AddTask(t)
 	return
 }
@@ -365,4 +368,8 @@ func (self *TaskManager) StopTasks(uid, pid string, typ int) {
 			go t.Stop()
 		}
 	}
+}
+
+func (self *TaskManager) Scheduler() TaskScheduler {
+	return self.scheduler
 }
