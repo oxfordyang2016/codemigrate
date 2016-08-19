@@ -51,7 +51,8 @@ type UploadReq struct {
 
 type DownloadReq struct {
 	*transfer.DownloadTaskReq
-	// Pid             string
+	// jzh: DownloadTaskReq里是owner_uid, TaskUid指请求的用户uid
+	TaskUid         string
 	FinishedSidList []string //已经下完的片段
 	meta            interface{}
 }
@@ -101,7 +102,7 @@ func NewTask(msg *transfer.Message) *Task {
 	} else {
 		req := msg.Req.DownloadTask
 		t.TaskId = req.TaskId
-		t.Uid = req.Uid
+		t.Uid = ""
 		t.Pid = req.Pid
 		t.Fid = req.Fid
 		t.Type = cydex.DOWNLOAD
@@ -248,7 +249,7 @@ func (self *TaskManager) DelTask(taskid string) {
 	clog.Infof("Del task(%s) %+v", taskid, t)
 }
 
-func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (rsp *transfer.UploadTaskRsp, node *trans.Node, err error) {
+func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (rsp *transfer.Message, node *trans.Node, err error) {
 	if req == nil || req.TaskId == "" {
 		err = errors.New("Invalid req")
 		return
@@ -266,25 +267,28 @@ func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (
 		return
 	}
 
-	var rsp_msg *transfer.Message
 	msg := transfer.NewReqMessage("", "uploadtask", "", 0)
 	msg.Req.UploadTask = req.UploadTaskReq
-	if rsp_msg, err = node.SendRequestSync(msg, timeout); err != nil {
+	if rsp, err = node.SendRequestSync(msg, timeout); err != nil {
 		// log
-		clog.Warnf("%s send upload task failed, err:%s", node, err)
+		// clog.Errorf("%s send upload task failed, err:%s", node, err)
 		return
 	}
-	// TODO 判断rsp_msg的Code值
-	rsp = rsp_msg.Rsp.UploadTask
+
+	if rsp.Rsp.Code != cydex.OK {
+		// clog.Errorf("%s send upload task failed, code:%d", node, rsp.Rsp.Code)
+		return
+	}
 
 	t := NewTask(msg)
 	t.UploadReq = req
 	t.Nid = node.Nid
 	TaskMgr.AddTask(t)
+
 	return
 }
 
-func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duration) (rsp *transfer.DownloadTaskRsp, node *trans.Node, err error) {
+func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duration) (rsp *transfer.Message, node *trans.Node, err error) {
 	if req == nil || req.TaskId == "" {
 		err = errors.New("Invalid req")
 		return
@@ -302,17 +306,19 @@ func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duratio
 		return
 	}
 
-	var rsp_msg *transfer.Message
 	msg := transfer.NewReqMessage("", "downloadtask", "", 0)
 	msg.Req.DownloadTask = req.DownloadTaskReq
-	if rsp_msg, err = node.SendRequestSync(msg, timeout); err != nil {
+	if rsp, err = node.SendRequestSync(msg, timeout); err != nil {
 		// log
 		return
 	}
-	rsp = rsp_msg.Rsp.DownloadTask
+	if rsp.Rsp.Code != cydex.OK {
+		return
+	}
 
 	t := NewTask(msg)
 	t.DownloadReq = req
+	t.Uid = req.TaskUid //FIXME
 	t.Nid = node.Nid
 	TaskMgr.AddTask(t)
 	return

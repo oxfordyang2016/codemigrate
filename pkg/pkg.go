@@ -30,11 +30,12 @@ type DefaultUnpacker struct {
 	min_seg_size   uint64 // in bytes
 	max_seg_num    uint
 	size_threshold uint64 // f.Size大于该值的, 按照最多max_seg_num拆分, 否则按照min_seg_size拆分
+	start_no       int    // 起始序号
 }
 
 // min_seg_size: 最小分片size(bytes) max_seg_num: 最大分片数
 func NewDefaultUnpacker(min_seg_size uint64, max_seg_num uint) *DefaultUnpacker {
-	return &DefaultUnpacker{min_seg_size, max_seg_num, min_seg_size * uint64(max_seg_num)}
+	return &DefaultUnpacker{min_seg_size, max_seg_num, min_seg_size * uint64(max_seg_num), 0}
 }
 
 func (self *DefaultUnpacker) GeneratePid(uid string, title, notes string) (pid string) {
@@ -43,10 +44,10 @@ func (self *DefaultUnpacker) GeneratePid(uid string, title, notes string) (pid s
 }
 
 func (self *DefaultUnpacker) GenerateFid(pid string, index int, file *cydex.SimpleFile) (fid string, err error) {
-	if index > 99 {
+	if index+self.start_no > 99 {
 		return "", errors.New("too many files")
 	}
-	s := fmt.Sprintf("%02d", index)
+	s := fmt.Sprintf("%02d", index+self.start_no)
 	return pid + s, nil
 }
 
@@ -73,7 +74,7 @@ func (self *DefaultUnpacker) GenerateSegs(fid string, f *cydex.SimpleFile) ([]*c
 			size = total_size
 		}
 		seg := &cydex.Seg{
-			Sid: fmt.Sprintf("%s%08d", fid, idx),
+			Sid: fmt.Sprintf("%s%08d", fid, idx+self.start_no),
 		}
 		seg.SetSize(size)
 		segs = append(segs, seg)

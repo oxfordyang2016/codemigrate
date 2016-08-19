@@ -63,7 +63,6 @@ func (s *WSServer) Serve() {
 func (s *WSServer) connHandle(ws *websocket.Conn) {
 	var node *Node
 	var msgstring string
-	var msg transfer.Message
 	var rsp *transfer.Message
 	var err error
 
@@ -83,12 +82,13 @@ func (s *WSServer) connHandle(ws *websocket.Conn) {
 			break
 		}
 		clog.Trace(msgstring)
-		if err = json.Unmarshal([]byte(msgstring), &msg); err != nil {
+		msg := new(transfer.Message)
+		if err = json.Unmarshal([]byte(msgstring), msg); err != nil {
 			clog.Warnf("json unmarshal error:%s", err)
 			continue
 		}
 
-		rsp, err = node.HandleMsg(&msg)
+		rsp, err = node.HandleMsg(msg)
 		if rsp != nil {
 			clog.Trace(rsp)
 			node.SendMessage(rsp)

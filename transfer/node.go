@@ -203,11 +203,11 @@ func (self *Node) HandleMsg(msg *transfer.Message) (rsp *transfer.Message, err e
 	if msg.IsReq() {
 		rsp = msg.BuildRsp()
 		rsp.Rsp.Code = cydex.OK
-		if msg == nil {
-			rsp.Rsp.Code = cydex.ErrInvalidParam
-			rsp.Rsp.Reason = "Invalid Param"
-			return
-		}
+		// if msg == nil {
+		// 	rsp.Rsp.Code = cydex.ErrInvalidParam
+		// 	rsp.Rsp.Reason = "Invalid Param"
+		// 	return
+		// }
 	}
 
 	lower_cmd := strings.ToLower(msg.Cmd)
@@ -299,8 +299,8 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 	self.Info.CpuUsage = msg.Req.Login.CpuUsage
 	self.Info.TotalMem = msg.Req.Login.TotalMem
 	self.Info.FreeMem = msg.Req.Login.FreeMem
-	self.Info.UploadBandwidth = msg.Req.Login.UploadBandwidth
-	self.Info.DownloadBandwidth = msg.Req.Login.DownloadBandwidth
+	self.Info.UploadBandwidth = msg.Req.Login.RxBandwidth
+	self.Info.DownloadBandwidth = msg.Req.Login.TxBandwidth
 	self.login_at = time.Now()
 	self.Update(true)
 

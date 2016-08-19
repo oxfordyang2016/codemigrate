@@ -856,7 +856,7 @@ func deletePkg(job *pkg_model.Job) {
 			if sids == nil {
 				return
 			}
-			task_req := buildTaskDownloadReq(job.Uid, pid, file.Fid, sids)
+			task_req := buildTaskDownloadReq(job.Uid, job.Uid, pid, file.Fid, sids)
 			clog.Tracef("%+v", task_req)
 			node, err := task.TaskMgr.Scheduler().DispatchDownload(task_req)
 			if node != nil {

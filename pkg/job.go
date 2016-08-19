@@ -36,7 +36,7 @@ func HashJob(uid, pid string, typ int) string {
 	case cydex.DOWNLOAD:
 		s = "D"
 	}
-	return fmt.Sprintf("%s:%s:%s", uid, s, pid)
+	return fmt.Sprintf("%s_%s_%s", uid, s, pid)
 }
 
 func getMetaFromTask(t *task.Task) (uid, pid, fid string, typ int) {

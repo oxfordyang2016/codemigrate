@@ -89,11 +89,12 @@ func (self *TransferController) Post() {
 	}
 }
 
-func buildTaskDownloadReq(uid, pid, fid string, sids []string) *task.DownloadReq {
+func buildTaskDownloadReq(owner_uid, uid, pid, fid string, sids []string) *task.DownloadReq {
 	task_req := new(task.DownloadReq)
+	task_req.TaskUid = uid
 	task_req.DownloadTaskReq = &transfer.DownloadTaskReq{
 		TaskId:  task.GenerateTaskId(),
-		Uid:     uid,
+		Uid:     owner_uid,
 		Pid:     pid,
 		Fid:     fid,
 		SidList: sids,
@@ -122,32 +123,31 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 	jobid := pkg.HashJob(uid, pid, cydex.DOWNLOAD)
 	pkg.UpdateJobDetailProcess(jobid, req.Fid, req.FinishedSize, req.NumFinishedSegs)
 
+	// jzh: 获取包裹所有者的uid
+	var owner_uid string
+	jobs, _ := pkg_model.GetJobsByPid(pid, cydex.UPLOAD, nil)
+	if len(jobs) > 0 {
+		owner_uid = jobs[0].Uid
+	} else {
+		clog.Errorf("pkg %s upload job not found", pid)
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
 	// get storages
-	task_req := buildTaskDownloadReq(uid, pid, req.Fid, req.SegIds)
-	// task_req := new(task.DownloadReq)
-	// task_req.DownloadTaskReq = &transfer.DownloadTaskReq{
-	// 	TaskId:  task.GenerateTaskId(),
-	// 	Uid:     uid,
-	// 	Pid:     pid,
-	// 	Fid:     req.Fid,
-	// 	SidList: req.SegIds,
-	// }
-	// // get storages
-	// for _, sid := range req.SegIds {
-	// 	seg, _ := pkg_model.GetSeg(sid)
-	// 	storage := ""
-	// 	if seg != nil {
-	// 		storage = seg.Storage
-	// 	}
-	// 	task_req.DownloadTaskReq.SidStorage = append(task_req.DownloadTaskReq.SidStorage, storage)
-	// }
-
-	task_rsp, node, err := task.TaskMgr.DispatchDownload(task_req, DISPATCH_TIMEOUT)
-	if err != nil || node == nil || task_rsp == nil {
+	task_req := buildTaskDownloadReq(owner_uid, uid, pid, req.Fid, req.SegIds)
+	trans_rsp, node, err := task.TaskMgr.DispatchDownload(task_req, DISPATCH_TIMEOUT)
+	if err != nil || node == nil || trans_rsp == nil {
 		clog.Error(err)
 		rsp.Error = cydex.ErrInnerServer
 		return
 	}
+	rsp.Error = trans_rsp.Rsp.Code
+	if rsp.Error != cydex.OK {
+		clog.Errorf("dispatch download task failed, code:%d", rsp.Error)
+		return
+	}
+
+	task_rsp := trans_rsp.Rsp.DownloadTask
 
 	rsp.Host = getHost(node.Host)
 	rsp.Port = task_rsp.Port
@@ -165,6 +165,8 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 			rsp.Segs = make([]*cydex.Seg, 0)
 		}
 	}
+
+	clog.Infof("dispatch download ok, host:%s, port:%d, bps:%d", node.Host, task_rsp.Port, task_rsp.RecomendBitrate)
 }
 
 func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex.TransferRsp) {
@@ -187,19 +189,23 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 
 	clog.Tracef("pid:%s, segs size:%d", task_req.Pid, task_req.UploadTaskReq.Size)
 
-	task_rsp, node, err := task.TaskMgr.DispatchUpload(task_req, DISPATCH_TIMEOUT)
-	clog.Trace(task_rsp, node)
-	if err != nil || node == nil || task_rsp == nil {
+	trans_rsp, node, err := task.TaskMgr.DispatchUpload(task_req, DISPATCH_TIMEOUT)
+	if err != nil || node == nil || trans_rsp == nil {
 		clog.Error(err)
 		rsp.Error = cydex.ErrInnerServer
 		return
 	}
-	clog.Trace("dispatch upload ok")
+	if trans_rsp.Rsp.Code != cydex.OK {
+		clog.Tracef("dispatch upload failed, code:%d, reason:%s ", trans_rsp.Rsp.Code, trans_rsp.Rsp.Reason)
+		rsp.Error = trans_rsp.Rsp.Code
+		return
+	}
 
-	update_storage := true
+	task_rsp := trans_rsp.Rsp.UploadTask
 	if len(task_rsp.SidStorage) != len(task_rsp.SidList) {
-		clog.Error("storage len is not match")
-		update_storage = false
+		clog.Error("seg storage len is not match")
+		rsp.Error = cydex.ErrInnerServer
+		return
 	}
 
 	rsp.Host = getHost(node.Host)
@@ -208,9 +214,7 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 	for i, sid := range task_rsp.SidList {
 		seg_m, _ := pkg_model.GetSeg(sid)
 		if seg_m != nil {
-			if update_storage {
-				seg_m.SetStorage(task_rsp.SidStorage[i])
-			}
+			seg_m.SetStorage(task_rsp.SidStorage[i])
 			seg := new(cydex.Seg)
 			seg.Sid = seg_m.Sid
 			seg.SetSize(seg_m.Size)
@@ -221,6 +225,8 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 			rsp.Segs = make([]*cydex.Seg, 0)
 		}
 	}
+
+	clog.Infof("dispatch upload ok, host:%s, port:%d, bps:%d", node.Host, task_rsp.Port, task_rsp.RecomendBitrate)
 }
 
 // 如果是"127.0.0.1", 则返回空,兼容单机版
