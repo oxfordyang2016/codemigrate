@@ -745,7 +745,8 @@ func (self *PkgController) Put() {
 	for _, uid := range req.RemoveList {
 		// stop transferring tasks
 		clog.Trace("remove:", uid, pid)
-		task.TaskMgr.StopTasks(uid, pid, cydex.DOWNLOAD)
+		jobid := pkg.HashJob(uid, pid, cydex.DOWNLOAD)
+		task.TaskMgr.StopTasks(jobid)
 
 		// delete resource in cache and db
 		if err := pkg.JobMgr.DeleteJob(uid, pid, cydex.DOWNLOAD); err != nil {
@@ -856,7 +857,7 @@ func deletePkg(job *pkg_model.Job) {
 			if sids == nil {
 				return
 			}
-			task_req := buildTaskDownloadReq(job.Uid, job.Uid, pid, file.Fid, sids)
+			task_req := buildTaskDownloadReq(job.Uid, pid, file.Fid, sids)
 			clog.Tracef("%+v", task_req)
 			node, err := task.TaskMgr.Scheduler().DispatchDownload(task_req)
 			if node != nil {
@@ -872,7 +873,6 @@ func deletePkg(job *pkg_model.Job) {
 				}
 				clog.Tracef("%+v", msg.Req.RemoveFile)
 				if _, err = node.SendRequestSync(msg, timeout); err != nil {
-					// clog.Error("")
 					return
 				}
 			}

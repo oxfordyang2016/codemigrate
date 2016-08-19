@@ -89,12 +89,11 @@ func (self *TransferController) Post() {
 	}
 }
 
-func buildTaskDownloadReq(owner_uid, uid, pid, fid string, sids []string) *task.DownloadReq {
+func buildTaskDownloadReq(uid, pid, fid string, sids []string) *task.DownloadReq {
 	task_req := new(task.DownloadReq)
-	task_req.TaskUid = uid
 	task_req.DownloadTaskReq = &transfer.DownloadTaskReq{
 		TaskId:  task.GenerateTaskId(),
-		Uid:     owner_uid,
+		Uid:     uid,
 		Pid:     pid,
 		Fid:     fid,
 		SidList: sids,
@@ -134,7 +133,8 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 		return
 	}
 	// get storages
-	task_req := buildTaskDownloadReq(owner_uid, uid, pid, req.Fid, req.SegIds)
+	task_req := buildTaskDownloadReq(owner_uid, pid, req.Fid, req.SegIds)
+	task_req.JobId = jobid
 	trans_rsp, node, err := task.TaskMgr.DispatchDownload(task_req, DISPATCH_TIMEOUT)
 	if err != nil || node == nil || trans_rsp == nil {
 		clog.Error(err)
@@ -171,8 +171,10 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 
 func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex.TransferRsp) {
 	uid := self.GetString(":uid")
-	task_req := new(task.UploadReq)
 	pid := pkg.GetUnpacker().GetPidFromFid(req.Fid)
+
+	task_req := new(task.UploadReq)
+	task_req.JobId = pkg.HashJob(uid, pid, cydex.UPLOAD)
 	task_req.UploadTaskReq = &transfer.UploadTaskReq{
 		TaskId:  task.GenerateTaskId(),
 		Uid:     uid,

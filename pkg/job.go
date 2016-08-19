@@ -39,27 +39,6 @@ func HashJob(uid, pid string, typ int) string {
 	return fmt.Sprintf("%s_%s_%s", uid, s, pid)
 }
 
-func getMetaFromTask(t *task.Task) (uid, pid, fid string, typ int) {
-	if t == nil {
-		return
-	}
-	uid = t.Uid
-	pid = t.Pid
-	fid = t.Fid
-	typ = t.Type
-	return
-}
-
-func getHashIdFromTask(t *task.Task) string {
-	uid, pid, _, typ := getMetaFromTask(t)
-	return HashJob(uid, pid, typ)
-}
-
-// func getFidFromTask(t *task.Task) (fid string) {
-// 	_, _, fid, _ = getMetaFromTask(t)
-// 	return
-// }
-
 // 获取运行时segs的信息, 没有就添加进runtime
 // size表示接收到的size, 不是seg的size
 func getSegRuntime(jd *models.JobDetail, sid string) (s *models.Seg) {
@@ -341,12 +320,12 @@ func (self *JobManager) GetJobDetail(jobid, fid string) (jd *models.JobDetail) {
 
 // implement task.TaskObserver
 func (self *JobManager) AddTask(t *task.Task) {
-	hashid := getHashIdFromTask(t)
-	job := self.GetJob(hashid)
+	jobid := t.JobId
+	job := self.GetJob(jobid)
 	if job == nil {
 		return
 	}
-	jd := self.GetJobDetail(hashid, t.Fid)
+	jd := self.GetJobDetail(jobid, t.Fid)
 	if jd == nil {
 		return
 	}
@@ -377,17 +356,17 @@ func (self *JobManager) DelTask(t *task.Task) {
 }
 
 func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState) {
-	uid, pid, _, typ := getMetaFromTask(t)
-	sid := state.Sid
-	if sid == "" || uid == "" || pid == "" {
+	if t == nil || state == nil || state.Sid == "" {
 		return
 	}
-	hashid := getHashIdFromTask(t)
-	j := self.GetJob(hashid)
+	// uid, pid, _, typ := getMetaFromTask(t)
+	sid := state.Sid
+	jobid := t.JobId
+	j := self.GetJob(jobid)
 	if j == nil {
 		return
 	}
-	jd := self.GetJobDetail(hashid, t.Fid)
+	jd := self.GetJobDetail(jobid, t.Fid)
 	if jd == nil {
 		return
 	}
@@ -425,12 +404,12 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 		j.SetState(cydex.TRANSFER_STATE_DONE)
 		self.lock.Lock()
 		delete(self.jobs, j.JobId)
-		self.DelTrack(uid, pid, typ, false)
+		self.DelTrack(j.Uid, j.Pid, j.Type, false)
 		self.lock.Unlock()
 	}
 
 	//jzh: 将上传seg的发生变化的状态更新进数据库
-	if typ == cydex.UPLOAD {
+	if j.Type == cydex.UPLOAD {
 		seg_m, _ := models.GetSeg(sid)
 		// clog.Tracef("sid:%s model_s:%d runtime_s:%d", sid, seg_m.State, seg_rt.State)
 		if seg_m != nil && seg_m.State != seg_state {

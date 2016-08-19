@@ -36,6 +36,7 @@ type TaskObserver interface {
 
 type UploadReq struct {
 	*transfer.UploadTaskReq
+	JobId string
 }
 
 // func NewUploadReq(r *transfer.UploadTaskReq, pid string) (req *UploadReq, err error) {
@@ -52,9 +53,10 @@ type UploadReq struct {
 type DownloadReq struct {
 	*transfer.DownloadTaskReq
 	// jzh: DownloadTaskReq里是owner_uid, TaskUid指请求的用户uid
-	TaskUid         string
+	// TaskUid         string
 	FinishedSidList []string //已经下完的片段
 	meta            interface{}
+	JobId           string
 }
 
 // func NewDownloadReq(r *transfer.DownloadTaskReq, pid string, finished_sid_list []string) (req *DownloadReq, err error) {
@@ -70,9 +72,10 @@ type DownloadReq struct {
 // }
 
 type Task struct {
-	TaskId      string // 任务ID
-	Uid         string
-	Pid         string
+	TaskId string // 任务ID
+	JobId  string // 包裹JobId
+	// Uid         string
+	// Pid         string
 	Fid         string
 	Type        int // 类型, U or D
 	UploadReq   *UploadReq
@@ -83,8 +86,9 @@ type Task struct {
 	Nid         string
 }
 
-func NewTask(msg *transfer.Message) *Task {
+func NewTask(job_id string, msg *transfer.Message) *Task {
 	t := new(Task)
+	t.JobId = job_id
 	t.CreateAt = time.Now()
 	t.UpdateAt = time.Now()
 	t.SegsState = make(map[string]*transfer.TaskState)
@@ -94,16 +98,16 @@ func NewTask(msg *transfer.Message) *Task {
 	if msg.Cmd == "uploadtask" {
 		req := msg.Req.UploadTask
 		t.TaskId = req.TaskId
-		t.Uid = req.Uid
-		t.Pid = req.Pid
+		// t.Uid = req.Uid
+		// t.Pid = req.Pid
 		t.Fid = req.Fid
 		t.Type = cydex.UPLOAD
 		sid_list = req.SidList
 	} else {
 		req := msg.Req.DownloadTask
 		t.TaskId = req.TaskId
-		t.Uid = ""
-		t.Pid = req.Pid
+		// t.Uid = ""
+		// t.Pid = req.Pid
 		t.Fid = req.Fid
 		t.Type = cydex.DOWNLOAD
 		sid_list = req.SidList
@@ -280,7 +284,7 @@ func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (
 		return
 	}
 
-	t := NewTask(msg)
+	t := NewTask(req.JobId, msg)
 	t.UploadReq = req
 	t.Nid = node.Nid
 	TaskMgr.AddTask(t)
@@ -316,9 +320,9 @@ func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duratio
 		return
 	}
 
-	t := NewTask(msg)
+	t := NewTask(req.JobId, msg)
 	t.DownloadReq = req
-	t.Uid = req.TaskUid //FIXME
+	// t.Uid = req.TaskUid //FIXME
 	t.Nid = node.Nid
 	TaskMgr.AddTask(t)
 	return
@@ -365,12 +369,12 @@ func (self *TaskManager) ListenTaskState() {
 }
 
 // 根据相关信息停止任务
-func (self *TaskManager) StopTasks(uid, pid string, typ int) {
+func (self *TaskManager) StopTasks(jobid string) {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
 	for _, t := range self.tasks {
-		if t.Uid == uid && t.Pid == pid && t.Type == typ {
+		if t.JobId == jobid {
 			go t.Stop()
 		}
 	}

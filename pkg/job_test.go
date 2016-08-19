@@ -171,8 +171,7 @@ func Test_CreateJob(t *testing.T) {
 				So(jd.StartTime.IsZero(), ShouldBeTrue)
 				t := &task.Task{
 					TaskId: "t1",
-					Uid:    "1234567890ab",
-					Pid:    pid,
+					JobId:  hashid,
 					Fid:    fid1,
 					Type:   cydex.UPLOAD,
 					UploadReq: &task.UploadReq{
@@ -201,8 +200,7 @@ func Test_CreateJob(t *testing.T) {
 				}
 				t := &task.Task{
 					TaskId: "t1",
-					Uid:    "1234567890ab",
-					Pid:    pid,
+					JobId:  hashid,
 					Fid:    fid1,
 					Type:   cydex.UPLOAD,
 					UploadReq: &task.UploadReq{
@@ -233,8 +231,7 @@ func Test_CreateJob(t *testing.T) {
 				}
 				t := &task.Task{
 					TaskId: "t1",
-					Uid:    "1234567890ab",
-					Pid:    pid,
+					JobId:  hashid,
 					Fid:    fid1,
 					Type:   cydex.UPLOAD,
 					UploadReq: &task.UploadReq{
@@ -266,8 +263,7 @@ func Test_CreateJob(t *testing.T) {
 				}
 				t := &task.Task{
 					TaskId: "t2",
-					Uid:    "1234567890ab",
-					Pid:    pid,
+					JobId:  hashid,
 					Fid:    fid2,
 					Type:   cydex.UPLOAD,
 					UploadReq: &task.UploadReq{

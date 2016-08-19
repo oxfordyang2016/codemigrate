@@ -195,13 +195,13 @@ func Test_Node(t *testing.T) {
 				msg := transfer.NewReqMessage(test_nid, "keepalive", test_token, seq)
 				msg.Req = &transfer.Request{
 					Keepalive: &transfer.KeepaliveReq{
-						CpuUsage:          89,
-						TotalStorage:      1234,
-						FreeStorage:       12,
-						TotalMem:          128 * 1024 * 1024,
-						FreeMem:           123 * 1024,
-						UploadBandwidth:   100,
-						DownloadBandwidth: 100,
+						CpuUsage:     89,
+						TotalStorage: 1234,
+						FreeStorage:  12,
+						TotalMem:     128 * 1024 * 1024,
+						FreeMem:      123 * 1024,
+						RxBandwidth:  100,
+						TxBandwidth:  100,
 					},
 				}
 				node := NodeMgr.GetByNid(test_nid)
@@ -217,13 +217,13 @@ func Test_Node(t *testing.T) {
 				msg := transfer.NewReqMessage(test_nid, "keepalive", "invalid token", seq)
 				msg.Req = &transfer.Request{
 					Keepalive: &transfer.KeepaliveReq{
-						CpuUsage:          89,
-						TotalStorage:      1234,
-						FreeStorage:       12,
-						TotalMem:          128 * 1024 * 1024,
-						FreeMem:           123 * 1024,
-						UploadBandwidth:   100,
-						DownloadBandwidth: 100,
+						CpuUsage:     89,
+						TotalStorage: 1234,
+						FreeStorage:  12,
+						TotalMem:     128 * 1024 * 1024,
+						FreeMem:      123 * 1024,
+						RxBandwidth:  100,
+						TxBandwidth:  100,
 					},
 				}
 				node := NodeMgr.GetByNid(test_nid)
