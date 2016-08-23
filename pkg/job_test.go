@@ -174,15 +174,6 @@ func Test_CreateJob(t *testing.T) {
 					JobId:  hashid,
 					Fid:    fid1,
 					Type:   cydex.UPLOAD,
-					UploadReq: &task.UploadReq{
-						UploadTaskReq: &transfer.UploadTaskReq{
-							Uid:     "1234567890ab",
-							Pid:     pid,
-							Fid:     fid1,
-							SidList: []string{sid1_of_fid1},
-							Size:    2000,
-						},
-					},
 				}
 				JobMgr.AddTask(t)
 				So(jd.StartTime.IsZero(), ShouldBeFalse)
@@ -203,15 +194,6 @@ func Test_CreateJob(t *testing.T) {
 					JobId:  hashid,
 					Fid:    fid1,
 					Type:   cydex.UPLOAD,
-					UploadReq: &task.UploadReq{
-						UploadTaskReq: &transfer.UploadTaskReq{
-							Uid:     "1234567890ab",
-							Pid:     pid,
-							Fid:     fid1,
-							SidList: []string{sid1_of_fid1},
-							Size:    2000,
-						},
-					},
 				}
 				JobMgr.TaskStateNotify(t, state)
 				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_DOING)
@@ -234,15 +216,6 @@ func Test_CreateJob(t *testing.T) {
 					JobId:  hashid,
 					Fid:    fid1,
 					Type:   cydex.UPLOAD,
-					UploadReq: &task.UploadReq{
-						UploadTaskReq: &transfer.UploadTaskReq{
-							Uid:     "1234567890ab",
-							Pid:     pid,
-							Fid:     fid1,
-							SidList: []string{sid1_of_fid1},
-							Size:    2000,
-						},
-					},
 				}
 				JobMgr.TaskStateNotify(t, state)
 				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_DONE)
@@ -251,7 +224,7 @@ func Test_CreateJob(t *testing.T) {
 			})
 
 			Convey("job end", func() {
-				So(j.State, ShouldNotEqual, cydex.TRANSFER_STATE_DONE)
+				So(j.IsFinished(), ShouldBeFalse)
 
 				jd := JobMgr.GetJobDetail(j.JobId, fid2)
 				state := &transfer.TaskState{
@@ -266,21 +239,12 @@ func Test_CreateJob(t *testing.T) {
 					JobId:  hashid,
 					Fid:    fid2,
 					Type:   cydex.UPLOAD,
-					UploadReq: &task.UploadReq{
-						UploadTaskReq: &transfer.UploadTaskReq{
-							Uid:     "1234567890ab",
-							Pid:     pid,
-							Fid:     fid2,
-							SidList: []string{sid1_of_fid2},
-							Size:    3000,
-						},
-					},
 				}
 				JobMgr.TaskStateNotify(t, state)
 				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_DONE)
 
 				So(j.NumFinishedDetails, ShouldEqual, 2)
-				So(j.State, ShouldEqual, cydex.TRANSFER_STATE_DONE)
+				So(j.IsFinished(), ShouldBeTrue)
 				So(JobMgr.HasCachedJob(j.JobId), ShouldBeFalse)
 			})
 		})

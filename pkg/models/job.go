@@ -20,8 +20,8 @@ type Job struct {
 	Pkg   *Pkg   `xorm:"-"`
 	Uid   string `xorm:"varchar(12) not null"`
 	// Finished bool      `xorm:"BOOL not null default(0)"`
-	State    int       `xorm:"int not null default(0)"`
-	FinishAt time.Time `xorm:"DateTime"`
+	// State    int       `xorm:"int not null default(0)"`
+	// FinishAt time.Time `xorm:"DateTime"`
 	CreateAt time.Time `xorm:"DateTime created"`
 	UpdateAt time.Time `xorm:"DateTime updated"`
 	SoftDel  int       `xorm:"BOOL not null default(0)"`
@@ -96,14 +96,21 @@ func GetJobsByPid(pid string, typ int, p *cydex.Pagination) ([]*Job, error) {
 }
 
 // 查询未完成的任务
-func GetUnFinishedJobs() ([]*Job, error) {
+func GetUnFinishedJobs() (ret []*Job, err error) {
 	jobs := make([]*Job, 0)
-	var err error
-	where := fmt.Sprintf("state!=%d and soft_del=0", cydex.TRANSFER_STATE_DONE)
-	if err = DB().Where(where).Find(&jobs); err != nil {
+	if err = DB().Where("soft_del=0").Find(&jobs); err != nil {
 		return nil, err
 	}
-	return jobs, nil
+	for _, j := range jobs {
+		n, err := CountUnfinishedJobDetails(j.JobId)
+		if err != nil {
+			continue
+		}
+		if n > 0 {
+			ret = append(ret, j)
+		}
+	}
+	return ret, nil
 }
 
 // 删除job
@@ -180,14 +187,14 @@ func (self *Job) GetDetails() error {
 	return err
 }
 
-func (self *Job) SetState(state int) error {
-	self.State = state
-	if state == cydex.TRANSFER_STATE_DONE {
-		self.FinishAt = time.Now()
-	}
-	_, err := DB().Where("job_id=?", self.JobId).Cols("state", "finish_at").Update(self)
-	return err
-}
+// func (self *Job) SetState(state int) error {
+// 	self.State = state
+// 	if state == cydex.TRANSFER_STATE_DONE {
+// 		self.FinishAt = time.Now()
+// 	}
+// 	_, err := DB().Where("job_id=?", self.JobId).Cols("state", "finish_at").Update(self)
+// 	return err
+// }
 
 // func (self *Job) Finish() error {
 // 	j := &Job{
@@ -232,13 +239,18 @@ func (self *Job) SoftDelete(tag int) (err error) {
 	return err
 }
 
-// 复位, 重新开始
-func (self *Job) Reset() (err error) {
-	self.State = cydex.TRANSFER_STATE_IDLE
-	self.FinishAt = time.Time{}
-	_, err = DB().Where("job_id=?", self.JobId).Cols("state", "finish_at").Update(self)
-	return
+func (self *Job) IsFinished() bool {
+	n, _ := CountUnfinishedJobDetails(self.JobId)
+	return n == 0
 }
+
+// 复位, 重新开始
+// func (self *Job) Reset() (err error) {
+// 	self.State = cydex.TRANSFER_STATE_IDLE
+// 	self.FinishAt = time.Time{}
+// 	_, err = DB().Where("job_id=?", self.JobId).Cols("state", "finish_at").Update(self)
+// 	return
+// }
 
 func (self *Job) String() string {
 	return fmt.Sprintf("<Job(%s)", self.JobId)
@@ -302,6 +314,12 @@ func GetJobDetails(job_id string) ([]*JobDetail, error) {
 		return nil, err
 	}
 	return ds, nil
+}
+
+func CountUnfinishedJobDetails(job_id string) (int64, error) {
+	jd := new(JobDetail)
+	n, err := DB().Where("job_id=? and state!=?", job_id, cydex.TRANSFER_STATE_DONE).Count(jd)
+	return n, err
 }
 
 func GetJobDetailsByFid(fid string) ([]*JobDetail, error) {

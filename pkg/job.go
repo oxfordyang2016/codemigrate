@@ -163,15 +163,12 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 		self.lock.Lock()
 		defer self.lock.Unlock()
 
-		// 已经结束的job需要reset, 重新开始
-		if job_m.State == cydex.TRANSFER_STATE_DONE {
-			job_m.Reset()
-			job_m.GetDetails()
-			for _, jd := range job_m.Details {
-				jd.GetFile()
-				if jd.File.Size > 0 {
-					jd.Reset()
-				}
+		// job需要reset, 重新开始
+		job_m.GetDetails()
+		for _, jd := range job_m.Details {
+			jd.GetFile()
+			if jd.File.Size > 0 {
+				jd.Reset()
 			}
 		}
 
@@ -292,7 +289,7 @@ func (self *JobManager) GetJob(hashid string) *models.Job {
 	}
 	if j != nil {
 		j.Details = make(map[string]*models.JobDetail)
-		if j.State != cydex.TRANSFER_STATE_DONE {
+		if !j.IsFinished() {
 			j.GetDetails()
 			// issue-6: 需要计数已经完成的jd
 			for _, jd := range j.Details {
@@ -343,13 +340,13 @@ func (self *JobManager) AddTask(t *task.Task) {
 	// if t.Type == cydex.UPLOAD {
 	// }
 
-	if job.State != cydex.TRANSFER_STATE_DOING {
-		if job.State == cydex.TRANSFER_STATE_DONE {
-			clog.Warnf("%s transfer again", job)
-		} else {
-			job.SetState(cydex.TRANSFER_STATE_DOING)
-		}
-	}
+	// if job.State != cydex.TRANSFER_STATE_DOING {
+	// 	if job.State == cydex.TRANSFER_STATE_DONE {
+	// 		clog.Warnf("%s transfer again", job)
+	// 	} else {
+	// 		job.SetState(cydex.TRANSFER_STATE_DOING)
+	// 	}
+	// }
 
 	// jzh:不清楚是续传还是补传还是重新下载, 不好处理, api协议有缺陷
 	// // TODO: 要处理已经finished的,然后重新下载的
@@ -366,7 +363,6 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 	if t == nil || state == nil || state.Sid == "" {
 		return
 	}
-	// uid, pid, _, typ := getMetaFromTask(t)
 	sid := state.Sid
 	jobid := t.JobId
 	j := self.GetJob(jobid)
@@ -380,13 +376,9 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 	if jd.File == nil {
 		jd.GetFile()
 	}
-	// seg_rt := getSegRuntime(jd, sid)
 
 	// 更新JobDetails状态, 根据判断更新Job状态, 是否finished?
-	// seg_rt.Size = state.TotalBytes
 	seg_state := 0
-	// jd.Bitrate = state.Bitrate
-
 	s := strings.ToLower(state.State)
 	switch s {
 	case "transferring":
@@ -408,7 +400,7 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 	// job is finished?
 	if j.NumFinishedDetails == len(j.Details) {
 		clog.Infof("%s is finished", j)
-		j.SetState(cydex.TRANSFER_STATE_DONE)
+		// j.SetState(cydex.TRANSFER_STATE_DONE)
 		self.lock.Lock()
 		delete(self.jobs, j.JobId)
 		self.DelTrack(j.Uid, j.Pid, j.Type, false)
@@ -698,7 +690,7 @@ func PkgIsTransferring(pid string, typ int) (bool, error) {
 		}
 	}
 	for _, job := range jobs {
-		if job.State == cydex.TRANSFER_STATE_DOING {
+		if !job.IsFinished() {
 			return true, nil
 		}
 	}
