@@ -2,18 +2,20 @@ package task
 
 import (
 	trans "./.."
+	"./../../utils/cache"
 	"cydex"
 	"cydex/transfer"
 	"errors"
 	"fmt"
 	clog "github.com/cihub/seelog"
+	"github.com/garyburd/redigo/redis"
 	"github.com/pborman/uuid"
 	"sync"
 	"time"
 )
 
 const (
-	TASK_TIMEOUT = 5 * time.Minute
+	TASK_CACHE_TIMEOUT = 20 * 60
 )
 
 var (
@@ -72,26 +74,27 @@ type DownloadReq struct {
 // }
 
 type Task struct {
-	TaskId string // 任务ID
-	JobId  string // 包裹JobId
+	TaskId string `redis:"task_id"` // 任务ID
+	JobId  string `redis:"job_id"`  // 包裹JobId
 	// Uid         string
-	// Pid         string
-	Fid         string
-	Type        int // 类型, U or D
-	UploadReq   *UploadReq
-	DownloadReq *DownloadReq
-	SegsState   map[string]*transfer.TaskState
-	CreateAt    time.Time
-	UpdateAt    time.Time
-	Nid         string
+	Pid  string `redis:"pid"`
+	Fid  string `redis:"fid"`
+	Type int    `redis:"type"` // 类型, U or D
+	// UploadReq   *UploadReq
+	// DownloadReq *DownloadReq
+	// SegsState   map[string]*transfer.TaskState
+	// CreateAt time.Time
+	// UpdateAt time.Time
+	NumSeg int    `redis:"num_seg"`
+	Nid    string `redis:"nid"`
 }
 
 func NewTask(job_id string, msg *transfer.Message) *Task {
 	t := new(Task)
 	t.JobId = job_id
-	t.CreateAt = time.Now()
-	t.UpdateAt = time.Now()
-	t.SegsState = make(map[string]*transfer.TaskState)
+	// t.CreateAt = time.Now()
+	// t.UpdateAt = time.Now()
+	// t.SegsState = make(map[string]*transfer.TaskState)
 
 	var sid_list []string
 
@@ -99,7 +102,7 @@ func NewTask(job_id string, msg *transfer.Message) *Task {
 		req := msg.Req.UploadTask
 		t.TaskId = req.TaskId
 		// t.Uid = req.Uid
-		// t.Pid = req.Pid
+		t.Pid = req.Pid
 		t.Fid = req.Fid
 		t.Type = cydex.UPLOAD
 		sid_list = req.SidList
@@ -107,18 +110,13 @@ func NewTask(job_id string, msg *transfer.Message) *Task {
 		req := msg.Req.DownloadTask
 		t.TaskId = req.TaskId
 		// t.Uid = ""
-		// t.Pid = req.Pid
+		t.Pid = req.Pid
 		t.Fid = req.Fid
 		t.Type = cydex.DOWNLOAD
 		sid_list = req.SidList
 	}
 
-	for _, sid := range sid_list {
-		t.SegsState[sid] = &transfer.TaskState{
-			TaskId: t.TaskId,
-			Sid:    sid,
-		}
-	}
+	t.NumSeg = len(sid_list)
 	return t
 }
 
@@ -146,18 +144,18 @@ func (self *Task) Stop() {
 	}
 }
 
-func (self *Task) IsOver() bool {
-	finished_segs := 0
-	for _, state := range self.SegsState {
-		if state.State == "interrupted" || state.State == "end" {
-			finished_segs++
-		}
-	}
-	if finished_segs == len(self.SegsState) {
-		return true
-	}
-	return false
-}
+// func (self *Task) IsOver() bool {
+// 	finished_segs := 0
+// 	for _, state := range self.SegsState {
+// 		if state.State == "interrupted" || state.State == "end" {
+// 			finished_segs++
+// 		}
+// 	}
+// 	if finished_segs == len(self.SegsState) {
+// 		return true
+// 	}
+// 	return false
+// }
 
 func (self *Task) String() string {
 	var s string
@@ -169,14 +167,18 @@ func (self *Task) String() string {
 	default:
 		s = "?"
 	}
-	return fmt.Sprintf("<Task(id:%s %s segs:%d)>", self.TaskId[:8], s, len(self.SegsState))
+	id := self.TaskId
+	if len(id) > 8 {
+		id = id[:8]
+	}
+	return fmt.Sprintf("<Task(id:%s %s %d)>", id, s, self.NumSeg)
 }
 
 // 任务管理器
 type TaskManager struct {
-	scheduler    TaskScheduler
-	lock         sync.Mutex
-	tasks        map[string]*Task // task_id -> node
+	scheduler TaskScheduler
+	lock      sync.Mutex
+	// tasks        map[string]*Task // task_id -> task
 	observer_idx uint32
 	observers    map[uint32]TaskObserver
 	// task_state_routine_run bool
@@ -185,7 +187,7 @@ type TaskManager struct {
 
 func NewTaskManager() *TaskManager {
 	t := new(TaskManager)
-	t.tasks = make(map[string]*Task)
+	// t.tasks = make(map[string]*Task)
 	t.observers = make(map[uint32]TaskObserver)
 	// t.task_state_chan = make(chan *transfer.TaskState, 10)
 	return t
@@ -217,34 +219,49 @@ func (self *TaskManager) DelObserver(id uint32) {
 
 func (self *TaskManager) AddTask(t *Task) {
 	// delete timeouted task
-	for _, t := range self.tasks {
-		if time.Since(t.UpdateAt) > TASK_TIMEOUT {
-			self.DelTask(t.TaskId)
-		}
+	// for _, t := range self.tasks {
+	// 	if time.Since(t.UpdateAt) > TASK_TIMEOUT {
+	// 		self.DelTask(t.TaskId)
+	// 	}
+	// }
+	if err := SaveTaskToCache(t); err != nil {
+		clog.Error("save task %s cache failed", t)
 	}
 
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
-	self.tasks[t.TaskId] = t
+	// self.tasks[t.TaskId] = t
 	for _, o := range self.observers {
 		o.AddTask(t)
 	}
 	clog.Infof("Add task %s", t)
 }
 
-func (self *TaskManager) GetTask(taskid string) (t *Task) {
-	defer self.lock.Unlock()
-	self.lock.Lock()
-	t, _ = self.tasks[taskid]
-	return
+func (self *TaskManager) GetTask(taskid string) *Task {
+	t, err := LoadTaskFromCache(taskid)
+	if err != nil {
+		clog.Error("load task(%s) from cache failed", taskid)
+	}
+	if t != nil {
+		UpdateTaskCache(t.TaskId)
+	}
+	return t
+	// defer self.lock.Unlock()
+	// self.lock.Lock()
+	// t, _ = self.tasks[taskid]
+	// return
 }
 
 func (self *TaskManager) DelTask(taskid string) {
-	defer self.lock.Unlock()
+	t, err := LoadTaskFromCache(taskid)
+	if err != nil {
+	}
+
+	DelTaskCache(taskid)
+
 	self.lock.Lock()
-	t, _ := self.tasks[taskid]
-	delete(self.tasks, taskid)
+	defer self.lock.Unlock()
 	if t != nil {
 		for _, o := range self.observers {
 			o.DelTask(t)
@@ -285,7 +302,7 @@ func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (
 	}
 
 	t := NewTask(req.JobId, msg)
-	t.UploadReq = req
+	// t.UploadReq = req
 	t.Nid = node.Nid
 	TaskMgr.AddTask(t)
 
@@ -321,8 +338,6 @@ func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duratio
 	}
 
 	t := NewTask(req.JobId, msg)
-	t.DownloadReq = req
-	// t.Uid = req.TaskUid //FIXME
 	t.Nid = node.Nid
 	TaskMgr.AddTask(t)
 	return
@@ -332,28 +347,27 @@ func (self *TaskManager) handleTaskState(state *transfer.TaskState) (err error) 
 	// clog.Tracef("TaskState: %+v", state)
 	t := self.GetTask(state.TaskId)
 	// clog.Trace(t)
-	if t != nil {
-		t.UpdateAt = time.Now()
-		s := t.SegsState[state.Sid]
-		if s != nil {
-			s.State = state.State
-			s.TotalBytes = state.TotalBytes
-			s.Bitrate = state.Bitrate
+	// if t != nil {
+	// 	t.UpdateAt = time.Now()
+	// 	s := t.SegsState[state.Sid]
+	// 	if s != nil {
+	// 		s.State = state.State
+	// 		s.TotalBytes = state.TotalBytes
+	// 		s.Bitrate = state.Bitrate
+	// 	}
+	// }
+
+	if state.Sid != "" {
+		self.lock.Lock()
+		for _, o := range self.observers {
+			o.TaskStateNotify(t, state)
 		}
+		self.lock.Unlock()
+	} else {
+		clog.Infof("%s is over", t)
+		self.DelTask(state.TaskId)
 	}
 
-	self.lock.Lock()
-	for _, o := range self.observers {
-		o.TaskStateNotify(t, state)
-	}
-	self.lock.Unlock()
-
-	if t != nil {
-		if t.IsOver() {
-			clog.Tracef("%s is over", t)
-			self.DelTask(state.TaskId)
-		}
-	}
 	return
 }
 
@@ -370,16 +384,85 @@ func (self *TaskManager) ListenTaskState() {
 
 // 根据相关信息停止任务
 func (self *TaskManager) StopTasks(jobid string) {
-	self.lock.Lock()
-	defer self.lock.Unlock()
-
-	for _, t := range self.tasks {
-		if t.JobId == jobid {
-			go t.Stop()
-		}
+	tasks, err := LoadTasksByJobIdFromCache(jobid)
+	if err != nil {
+		clog.Error("load tasks by jobid(%s) error", jobid)
+		return
+	}
+	for _, t := range tasks {
+		go t.Stop()
 	}
 }
 
 func (self *TaskManager) Scheduler() TaskScheduler {
 	return self.scheduler
+}
+
+func SaveTaskToCache(t *Task) (err error) {
+	conn := cache.Get()
+	defer conn.Close()
+	key := fmt.Sprintf("task#%s", t.TaskId)
+	_, err = conn.Do("HMSET", key, "task_id", t.TaskId, "job_id", t.JobId, "pid", t.Pid, "fid", t.Fid, "type", t.Type, "num_seg", t.NumSeg, "nid", t.Nid)
+	if err != nil {
+		return err
+	}
+	if _, err = conn.Do("EXPIRE", key, TASK_CACHE_TIMEOUT); err != nil {
+		return err
+	}
+	return nil
+}
+
+func UpdateTaskCache(task_id string) error {
+	conn := cache.Get()
+	defer conn.Close()
+	key := fmt.Sprintf("task#%s", task_id)
+	if _, err := conn.Do("EXPIRE", key, TASK_CACHE_TIMEOUT); err != nil {
+		return err
+	}
+	return nil
+}
+
+func DelTaskCache(task_id string) error {
+	conn := cache.Get()
+	defer conn.Close()
+	key := fmt.Sprintf("task#%s", task_id)
+	if _, err := conn.Do("DEL", key); err != nil {
+		return err
+	}
+	return nil
+}
+
+func LoadTaskFromCache(task_id string) (*Task, error) {
+	conn := cache.Get()
+	defer conn.Close()
+	key := fmt.Sprintf("task#%s", task_id)
+	t := new(Task)
+	rsp, err := redis.Values(conn.Do("HGETALL", key))
+	if err != nil {
+		return nil, err
+	}
+	if err = redis.ScanStruct(rsp, t); err != nil {
+		return nil, err
+	}
+	return t, nil
+}
+
+func LoadTasksByJobIdFromCache(job_id string) ([]*Task, error) {
+	conn := cache.Get()
+	defer conn.Close()
+	keys, err := redis.StringMap(conn.Do("KEYS", "task#*"))
+	if err != nil {
+		return nil, err
+	}
+	tasks := make([]*Task, 0, 5)
+	for _, key := range keys {
+		t, err := LoadTaskFromCache(key[5:])
+		if err != nil {
+			continue
+		}
+		if t.JobId == job_id {
+			tasks = append(tasks, t)
+		}
+	}
+	return tasks, nil
 }

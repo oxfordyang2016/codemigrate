@@ -1,7 +1,7 @@
 package models
 
 import (
-	"./../../db"
+	"./../../utils/db"
 	. "github.com/smartystreets/goconvey/convey"
 	"testing"
 )

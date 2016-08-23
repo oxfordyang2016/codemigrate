@@ -2,12 +2,13 @@ package main
 
 import (
 	_ "./api/"
-	"./db"
 	"./pkg"
 	pkg_model "./pkg/models"
 	trans "./transfer"
 	trans_model "./transfer/models"
 	"./transfer/task"
+	"./utils/cache"
+	"./utils/db"
 	"github.com/astaxie/beego"
 	clog "github.com/cihub/seelog"
 )
@@ -55,6 +56,7 @@ func start() {
 		clog.Criticalf("Init DB failed: %s", err)
 		panic("Shutdown")
 	}
+	cache.Init("127.0.0.1:6379", "")
 	// 设置拆包器
 	pkg.SetUnpacker(pkg.NewDefaultUnpacker(50*1024*1024, 25))
 	// 从数据库导入track

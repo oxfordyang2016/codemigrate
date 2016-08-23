@@ -371,6 +371,7 @@ func (self *JobDetail) Reset() error {
 	self.StartTime = time.Time{}
 	self.FinishTime = time.Time{}
 	self.FinishedSize = 0
+	self.NumFinishedSegs = 0
 	self.Checked = 0
 	return self.Save()
 }

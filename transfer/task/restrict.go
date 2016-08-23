@@ -19,14 +19,26 @@ const (
 	DEFAULT_RESOUCE_EXPIRE = 5 * time.Minute
 )
 
-type GetIdFunc func(req *UploadReq) string
+type GetIdFunc func(t *Task, req *UploadReq) string
 
-func GetPid(req *UploadReq) string {
-	return req.Pid
+func GetPid(t *Task, req *UploadReq) string {
+	if t != nil {
+		return t.Pid
+	}
+	if req != nil {
+		return req.Pid
+	}
+	return ""
 }
 
-func GetFid(req *UploadReq) string {
-	return req.Fid
+func GetFid(t *Task, req *UploadReq) string {
+	if t != nil {
+		return t.Fid
+	}
+	if req != nil {
+		return req.Fid
+	}
+	return ""
 }
 
 // 有约束的上传任务分配器
@@ -79,7 +91,7 @@ func (self *RestrictUploadScheduler) DispatchUpload(req *UploadReq) (n *trans.No
 	self.lock.Lock()
 
 	self.resource.DelExpired()
-	r := self.resource.Get(self.getId(req))
+	r := self.resource.Get(self.getId(nil, req))
 	if r != nil && r.nid != "" {
 		node := trans.NodeMgr.GetByNid(r.nid)
 		if node != nil {
@@ -94,14 +106,14 @@ func (self *RestrictUploadScheduler) DispatchUpload(req *UploadReq) (n *trans.No
 
 // implement task observer
 func (self *RestrictUploadScheduler) AddTask(t *Task) {
-	if t.Type != cydex.UPLOAD || t.UploadReq == nil {
+	if t.Type != cydex.UPLOAD {
 		return
 	}
 
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
-	xid := self.getId(t.UploadReq)
+	xid := self.getId(t, nil)
 	self.resource.Add(xid, t.Nid, DEFAULT_RESOUCE_EXPIRE)
 }
 
@@ -113,14 +125,14 @@ func (self *RestrictUploadScheduler) TaskStateNotify(t *Task, state *transfer.Ta
 	if t == nil {
 		return
 	}
-	if t.Type != cydex.UPLOAD || t.UploadReq == nil {
+	if t.Type != cydex.UPLOAD {
 		return
 	}
 
 	defer self.lock.Unlock()
 	self.lock.Lock()
 
-	xid := self.getId(t.UploadReq)
+	xid := self.getId(t, nil)
 	self.resource.Update(xid, t.Nid)
 }
 

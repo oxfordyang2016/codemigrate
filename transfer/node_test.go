@@ -1,7 +1,7 @@
 package transfer
 
 import (
-	"./../db"
+	"./../utils/db"
 	"./models"
 	"cydex"
 	"cydex/transfer"

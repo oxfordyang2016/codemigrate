@@ -37,16 +37,11 @@ func Test_RestrictUploadScheduler(t *testing.T) {
 			trans.NodeMgr.AddNode(node)
 			t1 := &Task{
 				TaskId: "t0",
+				JobId:  "jobid",
+				Pid:    "1234567890ab1111122222",
 				Type:   cydex.UPLOAD,
 				Nid:    "n1",
-				UploadReq: &UploadReq{
-					UploadTaskReq: &transfer.UploadTaskReq{
-						TaskId: "t1",
-						Uid:    "1234567890ab",
-						Pid:    "1234567890ab1111122222",
-						Fid:    "1234567890ab111112222201",
-					},
-				},
+				Fid:    "1234567890ab111112222201",
 			}
 			S.AddTask(t1)
 
@@ -86,14 +81,9 @@ func Test_RestrictUploadScheduler(t *testing.T) {
 			t1 := &Task{
 				TaskId: "t0",
 				Type:   cydex.UPLOAD,
+				Pid:    "pid",
+				Fid:    "1234567890ab111112222201",
 				Nid:    "n1",
-				UploadReq: &UploadReq{
-					UploadTaskReq: &transfer.UploadTaskReq{
-						TaskId: "t0",
-						Uid:    "1234567890ab",
-						Fid:    "1234567890ab111112222201",
-					},
-				},
 			}
 			S.AddTask(t1)
 
@@ -122,16 +112,10 @@ func Test_RestrictUploadScheduler(t *testing.T) {
 			trans.NodeMgr.AddNode(node)
 			t1 := &Task{
 				TaskId: "t0",
+				JobId:  "jobid",
+				Fid:    "1234567890ab111112222201",
 				Type:   cydex.UPLOAD,
 				Nid:    "n1",
-				UploadReq: &UploadReq{
-					UploadTaskReq: &transfer.UploadTaskReq{
-						TaskId: "t0",
-						Uid:    "1234567890ab",
-						Fid:    "1234567890ab111112222201",
-						Size:   11,
-					},
-				},
 			}
 			S.AddTask(t1)
 

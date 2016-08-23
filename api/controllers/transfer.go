@@ -42,6 +42,7 @@ func (self *TransferController) Post() {
 	rsp := new(cydex.TransferRsp)
 
 	defer func() {
+		clog.Tracef("%+v", rsp)
 		self.Data["json"] = rsp
 		self.ServeJSON()
 	}()

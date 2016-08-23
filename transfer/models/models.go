@@ -1,7 +1,7 @@
 package models
 
 import (
-	"./../../db"
+	"./../../utils/db"
 	"github.com/go-xorm/xorm"
 )
 

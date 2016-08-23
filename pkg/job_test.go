@@ -1,8 +1,8 @@
 package pkg
 
 import (
-	"./../db"
 	"./../transfer/task"
+	"./../utils/db"
 	"./models"
 	"cydex"
 	"cydex/transfer"

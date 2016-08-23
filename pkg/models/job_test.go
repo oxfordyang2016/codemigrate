@@ -1,7 +1,7 @@
 package models
 
 import (
-	"./../../db"
+	"./../../utils/db"
 	"cydex"
 	"fmt"
 	. "github.com/smartystreets/goconvey/convey"

@@ -17,7 +17,8 @@ import (
 
 const (
 	// JD数据同步进数据库的间隔
-	DEFAULT_CACHE_SYNC_TIMEOUT = 30 * time.Second
+	// DEFAULT_CACHE_SYNC_TIMEOUT = 30 * time.Second
+	DEFAULT_CACHE_SYNC_TIMEOUT = 0
 )
 
 var (
@@ -59,7 +60,13 @@ func getSegRuntime(jd *models.JobDetail, sid string) (s *models.Seg) {
 func updateJobDetail(jd *models.JobDetail, state *transfer.TaskState, seg_state int) (save bool) {
 	jd.Bitrate = state.Bitrate
 	if seg_state == cydex.TRANSFER_STATE_DONE {
-		jd.FinishedSize += state.TotalBytes
+		// NOTE: 因为f2tp下载时一个片段结束后得到的totalbytes是偏小的,所以使用数据库里的size来计算
+		seg_m, _ := models.GetSeg(state.Sid)
+		if seg_m != nil {
+			jd.FinishedSize += seg_m.Size
+		} else {
+			jd.FinishedSize += state.TotalBytes
+		}
 		jd.NumFinishedSegs++
 		save = true
 	} else {
