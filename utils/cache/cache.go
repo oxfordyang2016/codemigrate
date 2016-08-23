@@ -53,3 +53,10 @@ func Get() redis.Conn {
 	}
 	return Pool.Get()
 }
+
+func Ping() error {
+	conn := Get()
+	defer conn.Close()
+	_, err := conn.Do("PING")
+	return err
+}

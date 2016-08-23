@@ -27,8 +27,9 @@ type Job struct {
 	SoftDel  int       `xorm:"BOOL not null default(0)"`
 
 	// runtime usage
-	Details            map[string]*JobDetail `xorm:"-"`
-	NumFinishedDetails int                   `xorm:"-"`
+	Details              map[string]*JobDetail `xorm:"-"`
+	NumUnfinishedDetails int64                 `xorm:"-"`
+	IsCached             bool                  `xorm:"-"`
 }
 
 func CreateJob(jobid, uid, pid string, typ int) (*Job, error) {
@@ -185,6 +186,11 @@ func (self *Job) GetDetails() error {
 		self.Details[jd.Fid] = jd
 	}
 	return err
+}
+
+func (self *Job) CountUnfinishedDetails() int64 {
+	n, _ := CountUnfinishedJobDetails(self.JobId)
+	return n
 }
 
 // func (self *Job) SetState(state int) error {

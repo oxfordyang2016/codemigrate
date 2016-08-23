@@ -63,8 +63,8 @@ func (self *TransferController) Post() {
 	}
 	req.FinishedSize, _ = strconv.ParseUint(req.FinishedSizeStr, 10, 64)
 
-	if len(req.SegIds) == 0 || req.Fid == "" {
-		clog.Error("invalid param")
+	if req.Fid == "" {
+		clog.Error("Fid shouldn't be empty")
 		rsp.Error = cydex.ErrInvalidParam
 		return
 	}
@@ -119,8 +119,23 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 	uid := self.GetString(":uid")
 	pid := pkg.GetUnpacker().GetPidFromFid(req.Fid)
 
-	// update jd process
 	jobid := pkg.HashJob(uid, pid, cydex.DOWNLOAD)
+	// NOTE: 空seg数组表示客户端已有该Fid代表的文件
+	if len(req.SegIds) == 0 {
+		job := pkg.JobMgr.GetJob(jobid)
+		jd := pkg.JobMgr.GetJobDetail(jobid, req.Fid)
+		if jd != nil {
+			jd.SetState(cydex.TRANSFER_STATE_DONE)
+		}
+		if job != nil {
+			if job.IsCached {
+				job.NumUnfinishedDetails--
+			}
+		}
+		pkg.JobMgr.ProcessJob(jobid)
+		return
+	}
+	// update jd process
 	pkg.UpdateJobDetailProcess(jobid, req.Fid, req.FinishedSize, req.NumFinishedSegs)
 
 	// jzh: 获取包裹所有者的uid
@@ -171,6 +186,10 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 }
 
 func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex.TransferRsp) {
+	if len(req.SegIds) == 0 {
+		clog.Error("Array of Seg id shouldn't be empty!")
+		rsp.Error = cydex.ErrInvalidParam
+	}
 	uid := self.GetString(":uid")
 	pid := pkg.GetUnpacker().GetPidFromFid(req.Fid)
 

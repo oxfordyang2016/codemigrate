@@ -57,6 +57,11 @@ func start() {
 		panic("Shutdown")
 	}
 	cache.Init("127.0.0.1:6379", "")
+	err = cache.Ping()
+	if err != nil {
+		clog.Critical("Should enable redis first!")
+		panic("Shutdown")
+	}
 	// 设置拆包器
 	pkg.SetUnpacker(pkg.NewDefaultUnpacker(50*1024*1024, 25))
 	// 从数据库导入track

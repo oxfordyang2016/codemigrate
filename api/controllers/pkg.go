@@ -840,9 +840,9 @@ func deletePkg(job *pkg_model.Job) {
 
 	for _, file := range job.Pkg.Files {
 		// async job
+		// 注意闭包参数file, 在循环里capture
+		file := file
 		go func() {
-			// 注意循环参数'file'对闭包的影响
-			file := file
 			defer func() {
 				c <- 1
 			}()

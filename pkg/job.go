@@ -291,13 +291,15 @@ func (self *JobManager) GetJob(hashid string) *models.Job {
 		j.Details = make(map[string]*models.JobDetail)
 		if !j.IsFinished() {
 			j.GetDetails()
+			j.NumUnfinishedDetails = j.CountUnfinishedDetails()
 			// issue-6: 需要计数已经完成的jd
-			for _, jd := range j.Details {
-				if jd.State == cydex.TRANSFER_STATE_DONE {
-					j.NumFinishedDetails++
-				}
-			}
+			// for _, jd := range j.Details {
+			// 	if jd.State == cydex.TRANSFER_STATE_DONE {
+			// 		j.NumFinishedDetails++
+			// 	}
+			// }
 			// save to cache
+			j.IsCached = true
 			self.jobs[hashid] = j
 		}
 	}
@@ -336,27 +338,11 @@ func (self *JobManager) AddTask(t *task.Task) {
 	if jd.StartTime.IsZero() {
 		jd.SetStartTime(time.Now())
 	}
-	// // 上传需要更新seg storage
-	// if t.Type == cydex.UPLOAD {
-	// }
-
-	// if job.State != cydex.TRANSFER_STATE_DOING {
-	// 	if job.State == cydex.TRANSFER_STATE_DONE {
-	// 		clog.Warnf("%s transfer again", job)
-	// 	} else {
-	// 		job.SetState(cydex.TRANSFER_STATE_DOING)
-	// 	}
-	// }
-
-	// jzh:不清楚是续传还是补传还是重新下载, 不好处理, api协议有缺陷
-	// // TODO: 要处理已经finished的,然后重新下载的
-	// if t.DownlaodReq != nil && t.DownloadReq.FinishedSidList != nil {
-	// 	//TODO 断点续传, 需要重新计算FinishedSize和NumFinishedSeg
-	// }
 }
 
 func (self *JobManager) DelTask(t *task.Task) {
-
+	if t != nil {
+	}
 }
 
 func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState) {
@@ -394,18 +380,18 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 	force_save := updateJobDetail(jd, state, seg_state)
 
 	if jd.State == cydex.TRANSFER_STATE_DONE {
-		j.NumFinishedDetails++
+		j.NumUnfinishedDetails--
 	}
 
-	// job is finished?
-	if j.NumFinishedDetails == len(j.Details) {
-		clog.Infof("%s is finished", j)
-		// j.SetState(cydex.TRANSFER_STATE_DONE)
-		self.lock.Lock()
-		delete(self.jobs, j.JobId)
-		self.DelTrack(j.Uid, j.Pid, j.Type, false)
-		self.lock.Unlock()
-	}
+	// // job is finished?
+	// if j.NumFinishedDetails == len(j.Details) {
+	// 	clog.Infof("%s is finished", j)
+	// 	// j.SetState(cydex.TRANSFER_STATE_DONE)
+	// 	self.lock.Lock()
+	// 	delete(self.jobs, j.JobId)
+	// 	self.DelTrack(j.Uid, j.Pid, j.Type, false)
+	// 	self.lock.Unlock()
+	// }
 
 	//jzh: 将上传seg的发生变化的状态更新进数据库
 	if j.Type == cydex.UPLOAD {
@@ -420,6 +406,8 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 	if force_save || time.Since(jd.UpdateAt) >= self.cache_sync_timeout {
 		jd.Save()
 	}
+
+	self.ProcessJob(jobid)
 }
 
 func (self *JobManager) SetCacheSyncTimeout(d time.Duration) {
@@ -655,6 +643,34 @@ func (self *JobManager) getTrackOfDelete(uid string, typ int, remove bool) (pids
 	}
 
 	return
+}
+
+func (self *JobManager) isJobFinished(job *models.Job) bool {
+	if !job.IsCached {
+		if job.CountUnfinishedDetails() == 0 {
+			return true
+		}
+	} else {
+		if job.NumUnfinishedDetails <= 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (self *JobManager) ProcessJob(jobid string) {
+	job := self.GetJob(jobid)
+	if job == nil {
+		return
+	}
+	if self.isJobFinished(job) {
+		clog.Infof("%s is finished", jobid)
+		// j.SetState(cydex.TRANSFER_STATE_DONE)
+		self.lock.Lock()
+		delete(self.jobs, jobid)
+		self.DelTrack(job.Uid, job.Pid, job.Type, false)
+		self.lock.Unlock()
+	}
 }
 
 // 获取delete_track的信息

@@ -17,6 +17,11 @@ const (
 	TEST_DB = "/tmp/job.sqlite3"
 )
 
+func init() {
+	initDB()
+	JobMgr.SetCacheSyncTimeout(0)
+}
+
 func initDB() {
 	if TEST_DB != ":memory" {
 		os.Remove(TEST_DB)
@@ -104,9 +109,6 @@ func Test_CreateJob(t *testing.T) {
 	fid2 := "1234567890111112222202"
 	sid1_of_fid2 := "123456789011111222220200000001"
 
-	initDB()
-	JobMgr.SetCacheSyncTimeout(0)
-
 	Convey("Test CreateJob", t, func() {
 		Convey("Create pkg records first", func() {
 			pkg := &models.Pkg{
@@ -157,7 +159,7 @@ func Test_CreateJob(t *testing.T) {
 			j = JobMgr.GetJob(hashid)
 			So(j, ShouldNotBeNil)
 
-			hashid = HashJob("kk1234567890", pid, cydex.DOWNLOAD)
+			hashid = HashJob("not_existed_uid", pid, cydex.DOWNLOAD)
 			j, err = models.GetJob(hashid, true)
 			So(j, ShouldBeNil)
 		})
@@ -166,6 +168,10 @@ func Test_CreateJob(t *testing.T) {
 			hashid := HashJob("1234567890ab", pid, cydex.UPLOAD)
 			j := JobMgr.GetJob(hashid)
 
+			Convey("check first", func() {
+				So(j.IsCached, ShouldBeTrue)
+				So(j.NumUnfinishedDetails, ShouldEqual, 2)
+			})
 			Convey("add task", func() {
 				jd := JobMgr.GetJobDetail(j.JobId, fid1)
 				So(jd.StartTime.IsZero(), ShouldBeTrue)
@@ -220,7 +226,7 @@ func Test_CreateJob(t *testing.T) {
 				JobMgr.TaskStateNotify(t, state)
 				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_DONE)
 
-				So(j.NumFinishedDetails, ShouldEqual, 1)
+				So(j.NumUnfinishedDetails, ShouldEqual, 1)
 			})
 
 			Convey("job end", func() {
@@ -243,7 +249,8 @@ func Test_CreateJob(t *testing.T) {
 				JobMgr.TaskStateNotify(t, state)
 				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_DONE)
 
-				So(j.NumFinishedDetails, ShouldEqual, 2)
+				// So(j.NumFinishedDetails, ShouldEqual, 2)
+				So(j.NumUnfinishedDetails, ShouldEqual, 0)
 				So(j.IsFinished(), ShouldBeTrue)
 				So(JobMgr.HasCachedJob(j.JobId), ShouldBeFalse)
 			})
