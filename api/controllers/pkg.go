@@ -3,14 +3,11 @@ package controllers
 import (
 	"./../../pkg"
 	pkg_model "./../../pkg/models"
+	"./../../transfer/task"
 	"cydex"
 	"cydex/transfer"
-	"encoding/json"
-	// "fmt"
-	"./../../transfer/task"
 	"errors"
 	clog "github.com/cihub/seelog"
-	"io/ioutil"
 	"strconv"
 	"time"
 )
@@ -41,7 +38,7 @@ func aggregate(pkg_m *pkg_model.Pkg) (pkg_c *cydex.Pkg, err error) {
 	if pkg_m == nil {
 		return nil, errors.New("nil pkg model")
 	}
-	clog.Trace(pkg_m.Pid)
+	// clog.Trace(pkg_m.Pid)
 	pkg_c = new(cydex.Pkg)
 
 	pkg_c.Pid = pkg_m.Pid
@@ -502,18 +499,8 @@ func (self *PkgsController) Post() {
 	}
 
 	// 获取请求
-	r := self.Ctx.Request
-	defer r.Body.Close()
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
+	if err := self.FetchJsonBody(req); err != nil {
 		rsp.Error = cydex.ErrInvalidParam
-		return
-	}
-	clog.Debug(string(body))
-	if err := json.Unmarshal(body, req); err != nil {
-		clog.Error(err)
-		rsp.Error = cydex.ErrInvalidParam
-		return
 	}
 	for _, f := range req.Files {
 		f.Size, _ = strconv.ParseUint(f.SizeStr, 10, 64)
@@ -694,17 +681,9 @@ func (self *PkgController) Put() {
 		self.ServeJSON()
 	}()
 
+	var err error
 	// 获取请求
-	r := self.Ctx.Request
-	defer r.Body.Close()
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		rsp.Error = cydex.ErrInvalidParam
-		return
-	}
-	clog.Debug(string(body))
-	if err := json.Unmarshal(body, req); err != nil {
-		clog.Error(err)
+	if err = self.FetchJsonBody(req); err != nil {
 		rsp.Error = cydex.ErrInvalidParam
 		return
 	}
@@ -792,21 +771,12 @@ func (self *PkgController) Delete() {
 	}
 
 	// 是否在传输
-	transferring, err := pkg.PkgIsTransferring(pid, cydex.UPLOAD)
+	tasks, err := task.LoadTasksByPidFromCache(pid)
 	if err != nil {
 		rsp.Error = cydex.ErrInnerServer
 		return
 	}
-	if transferring {
-		rsp.Error = cydex.ErrActivePackage
-		return
-	}
-	transferring, err = pkg.PkgIsTransferring(pid, cydex.DOWNLOAD)
-	if err != nil {
-		rsp.Error = cydex.ErrInnerServer
-		return
-	}
-	if transferring {
+	if len(tasks) > 0 {
 		rsp.Error = cydex.ErrActivePackage
 		return
 	}

@@ -22,7 +22,7 @@ type WSServerConfig struct {
 
 var DefaultConfig WSServerConfig = WSServerConfig{
 	ConnDeadline:           10 * time.Second,
-	KeepaliveInterval:      300,
+	KeepaliveInterval:      180,
 	TransferNotifyInterval: 3,
 }
 
@@ -81,7 +81,7 @@ func (s *WSServer) connHandle(ws *websocket.Conn) {
 			log.Print(err)
 			break
 		}
-		clog.Trace(msgstring)
+		clog.Trace("node msg: ", msgstring)
 		msg := new(transfer.Message)
 		if err = json.Unmarshal([]byte(msgstring), msg); err != nil {
 			clog.Warnf("json unmarshal error:%s", err)
@@ -90,7 +90,7 @@ func (s *WSServer) connHandle(ws *websocket.Conn) {
 
 		rsp, err = node.HandleMsg(msg)
 		if rsp != nil {
-			clog.Trace(rsp)
+			// clog.Trace("node rsp:", rsp)
 			node.SendMessage(rsp)
 		}
 		if err != nil {

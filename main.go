@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "./api/"
+	api_ctrl "./api/controllers"
 	"./pkg"
 	pkg_model "./pkg/models"
 	trans "./transfer"
@@ -9,13 +10,25 @@ import (
 	"./transfer/task"
 	"./utils/cache"
 	"./utils/db"
+	"fmt"
 	"github.com/astaxie/beego"
 	clog "github.com/cihub/seelog"
+	"github.com/go-ini/ini"
+	"time"
+)
+
+const (
+	VERSION = "0.0.1-preview1"
+)
+
+var (
+	ws_server *trans.WSServer
+	http_addr string
 )
 
 func initLog() {
 	cfgfiles := []string{
-		"/opt/cydex/etc/ts_seelog.xml",
+		"/opt/cydex/etc/ts.d/seelog.xml",
 		"seelog.xml",
 	}
 	for _, file := range cfgfiles {
@@ -29,14 +42,18 @@ func initLog() {
 	}
 }
 
-// const DB = ":memory:"
-
-const DB = "/tmp/cydex.sqlite3"
-
-func initDB() (err error) {
+func setupDB(cfg *ini.File) (err error) {
 	// 创建数据库
-	clog.Info("init db")
-	if err = db.CreateEngine("sqlite3", DB, false); err != nil {
+	clog.Info("setup db")
+	sec, err := cfg.GetSection("db")
+	if err != nil {
+		return err
+	}
+	driver := sec.Key("driver").String()
+	source := sec.Key("source").String()
+	show_sql := sec.Key("show_sql").MustBool()
+	clog.Infof("[setup db] url:'%s %s' show_sql:%t", driver, source, show_sql)
+	if err = db.CreateEngine(driver, source, show_sql); err != nil {
 		return
 	}
 	// 同步表结构
@@ -49,40 +66,184 @@ func initDB() (err error) {
 	return
 }
 
-func start() {
-	initLog()
-	err := initDB()
+func setupCache(cfg *ini.File) (err error) {
+	sec, err := cfg.GetSection("redis")
 	if err != nil {
-		clog.Criticalf("Init DB failed: %s", err)
-		panic("Shutdown")
+		return err
 	}
-	cache.Init("127.0.0.1:6379", "")
+	url := sec.Key("url").String()
+	max_idles := sec.Key("max_idles").MustInt(3)
+	idle_timeout := sec.Key("idle_timeout").MustInt(240)
+	clog.Infof("[setup cache] url:'%s' max_idle:%d idle_timeout:%d", url, max_idles, idle_timeout)
+	cache.Init(url, max_idles, idle_timeout)
+	// test cache first
 	err = cache.Ping()
 	if err != nil {
-		clog.Critical("Should enable redis first!")
-		panic("Shutdown")
+		return err
 	}
-	// 设置拆包器
-	pkg.SetUnpacker(pkg.NewDefaultUnpacker(50*1024*1024, 25))
-	// 从数据库导入track
-	pkg.JobMgr.LoadTracks()
-	// set scheduler
-	task.TaskMgr.SetScheduler(task.NewDefaultScheduler())
-	// listen task state
-	task.TaskMgr.ListenTaskState()
-	// add job listen
-	task.TaskMgr.AddObserver(pkg.JobMgr)
+	return
 }
 
-func run_ws() {
-	ws_service := trans.NewWSServer("/ts", 12345, nil)
-	ws_service.SetVersion("1.0.0")
-	ws_service.Serve()
+func setupWebsocketService(cfg *ini.File) (err error) {
+	sec, err := cfg.GetSection("websocket")
+	if err != nil {
+		return err
+	}
+	url := sec.Key("url").String()
+	port := sec.Key("port").RangeInt(-1, 0, 65535)
+	if url == "" || port == -1 {
+		err = fmt.Errorf("Invalid websocket url:%s or port:%d", url, port)
+		return
+	}
+	idle_timeout := sec.Key("idle_timeout").MustUint(10)
+	keepalive_interval := sec.Key("keepalive_interval").MustUint(180)
+	notify_interval := sec.Key("notify_interval").MustUint(3)
+	ws_cfg := &trans.WSServerConfig{
+		ConnDeadline:           time.Duration(idle_timeout) * time.Second,
+		KeepaliveInterval:      keepalive_interval,
+		TransferNotifyInterval: notify_interval,
+	}
+	clog.Infof("[setup websocket] listen port:%d, with config [%d, %d, %d]", port, idle_timeout, keepalive_interval, notify_interval)
+	ws_server = trans.NewWSServer(url, port, ws_cfg)
+	return
+}
+
+func setupPkg(cfg *ini.File) (err error) {
+	sec, err := cfg.GetSection("pkg")
+	if err != nil {
+		return err
+	}
+
+	var unpacker pkg.Unpacker
+	unpacker_str := sec.Key("unpacker").MustString("default")
+	clog.Infof("[setup pkg] unpacker: %s", unpacker_str)
+	switch unpacker_str {
+	case "default":
+		sec_unpacker, err := cfg.GetSection("default_unpacker")
+		if err != nil {
+			return err
+		}
+		min_seg_size := ConfigGetSize(sec_unpacker.Key("min_seg_size").String())
+		if min_seg_size == 0 {
+			err = fmt.Errorf("Invalid min_seg_size:%d", min_seg_size)
+			return err
+		}
+		max_seg_cnt, err := sec_unpacker.Key("max_seg_cnt").Uint()
+		if err != nil {
+			return err
+		}
+		clog.Infof("[setup pkg] default unpacker: %d, %d", min_seg_size, max_seg_cnt)
+		unpacker = pkg.NewDefaultUnpacker(uint64(min_seg_size), max_seg_cnt)
+	default:
+		err = fmt.Errorf("Unsupport unpacker name:%s", unpacker)
+		return
+	}
+	pkg.SetUnpacker(unpacker)
+	return
+}
+
+func setupTask(cfg *ini.File) (err error) {
+	sec, err := cfg.GetSection("task")
+	if err != nil {
+		return err
+	}
+	scheduler_str := sec.Key("scheduler").MustString("default")
+	clog.Infof("[setup task] scheduler:%s", scheduler_str)
+	switch scheduler_str {
+	case "default":
+		task.TaskMgr.SetScheduler(task.NewDefaultScheduler())
+	default:
+		err = fmt.Errorf("Unsupport task scheduler name:%s", scheduler_str)
+		return
+	}
+	cache_timeout, err := sec.Key("cache_timeout").Int()
+	if err != nil {
+		return err
+	}
+	clog.Infof("[setup task] task cache timeout:%d", cache_timeout)
+	task.TaskMgr.SetCacheTimeout(cache_timeout)
+	return
+}
+
+func setupHttp(cfg *ini.File) (err error) {
+	sec, err := cfg.GetSection("http")
+	if err != nil {
+		return err
+	}
+	addr := sec.Key("addr").String()
+	if addr == "" {
+		err = fmt.Errorf("Http addr can't be empty!")
+		return
+	}
+	show_req := sec.Key("show_req").MustBool(false)
+	show_rsp := sec.Key("show_rsp").MustBool(false)
+	clog.Infof("[setup http] addr:'%s', show: [%t, %t]", addr, show_req, show_rsp)
+	http_addr = addr
+	api_ctrl.SetupBodyShow(show_req, show_rsp)
+
+	fake_api := sec.Key("fake_api").MustBool(false)
+	if fake_api {
+		clog.Warnf("Enable fake api for standalone running")
+		EnableFakeApi()
+	}
+	return
+}
+
+func setupApplication(cfg *ini.File) (err error) {
+	if err = setupDB(cfg); err != nil {
+		return
+	}
+	if err = setupCache(cfg); err != nil {
+		return
+	}
+	if err = setupPkg(cfg); err != nil {
+		return
+	}
+	if err = setupTask(cfg); err != nil {
+		return
+	}
+	if err = setupWebsocketService(cfg); err != nil {
+		return
+	}
+	if err = setupHttp(cfg); err != nil {
+		return
+	}
+	return
+}
+
+func run() {
+	// setup version
+	ws_server.SetVersion(VERSION)
+	// add job listen
+	task.TaskMgr.AddObserver(pkg.JobMgr)
+	// 从数据库导入track
+	pkg.JobMgr.LoadTracks()
+
+	go task.TaskMgr.TaskStateRoutine()
+	go ws_server.Serve()
+	go beego.Run(http_addr)
+
+	clog.Info("Run...")
 }
 
 func main() {
-	start()
-	clog.Info("start")
-	go run_ws()
-	beego.Run(":8088")
+	initLog()
+	clog.Infof("Start cydex transfer service, version:%s", VERSION)
+
+	cfg, err := LoadConfig()
+	if err != nil {
+		clog.Critical(err)
+		return
+	}
+
+	if err = setupApplication(cfg); err != nil {
+		clog.Critical(err)
+		return
+	}
+
+	run()
+
+	for {
+		time.Sleep(10 * time.Minute)
+	}
 }

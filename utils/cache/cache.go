@@ -10,23 +10,24 @@ var (
 	Pool *redis.Pool
 )
 
-func newPool(server, password string) *redis.Pool {
+func newPool(url string, max_idle, idle_timeout int) *redis.Pool {
+	timeout := time.Duration(idle_timeout) * time.Second
 	return &redis.Pool{
-		MaxIdle:     3,
-		IdleTimeout: 240 * time.Second,
+		MaxIdle:     max_idle,
+		IdleTimeout: timeout,
 		Dial: func() (redis.Conn, error) {
-			c, err := redis.Dial("tcp", server)
+			c, err := redis.DialURL(url)
 			if err != nil {
 				return nil, err
 
 			}
-			if password != "" {
-				if _, err := c.Do("AUTH", password); err != nil {
-					c.Close()
-					return nil, err
-
-				}
-			}
+			// if password != "" {
+			// 	if _, err := c.Do("AUTH", password); err != nil {
+			// 		c.Close()
+			// 		return nil, err
+			//
+			// 	}
+			// }
 			return c, err
 
 		},
@@ -42,8 +43,8 @@ func newPool(server, password string) *redis.Pool {
 	}
 }
 
-func Init(server, password string) {
-	Pool = newPool(server, password)
+func Init(url string, max_idle, idle_timeout int) {
+	Pool = newPool(url, max_idle, idle_timeout)
 }
 
 func Get() redis.Conn {

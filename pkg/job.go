@@ -694,24 +694,24 @@ func (self *JobManager) ClearTracks(mutex bool) {
 	self.track_deletes = make(map[string]*Track)
 }
 
-func PkgIsTransferring(pid string, typ int) (bool, error) {
-	jobs, err := JobMgr.GetJobsByPid(pid, typ)
-	if err != nil {
-		return false, err
-	}
-	if jobs == nil {
-		jobs, err = models.GetJobsByPid(pid, typ, nil)
-		if err != nil {
-			return false, err
-		}
-	}
-	for _, job := range jobs {
-		if !job.IsFinished() {
-			return true, nil
-		}
-	}
-	return false, nil
-}
+// func PkgIsTransferring(pid string, typ int) (bool, error) {
+// 	jobs, err := JobMgr.GetJobsByPid(pid, typ)
+// 	if err != nil {
+// 		return false, err
+// 	}
+// 	if jobs == nil {
+// 		jobs, err = models.GetJobsByPid(pid, typ, nil)
+// 		if err != nil {
+// 			return false, err
+// 		}
+// 	}
+// 	for _, job := range jobs {
+// 		if !job.IsFinished() {
+// 			return true, nil
+// 		}
+// 	}
+// 	return false, nil
+// }
 
 // 更新JD进度
 func UpdateJobDetailProcess(job_id, fid string, finished_size uint64, num_finished_segs int) {

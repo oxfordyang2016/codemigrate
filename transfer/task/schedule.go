@@ -69,17 +69,15 @@ func (self *DefaultScheduler) DispatchUpload(req *UploadReq) (n *trans.Node, err
 
 func (self *DefaultScheduler) DispatchDownload(req *DownloadReq) (n *trans.Node, err error) {
 	clog.Trace("dispatch download")
-	// NOTE: 客户端一次请求一个file的所有seg,上传也是, 所以这些seg的分段存在一个Node上
+	// TODO: 客户端一次请求一个file的所有seg,上传也是, 所以这些seg的分段存在一个Node上
 	// 这里判断storage是否是一个nodeid上?
 
-	// var url *URL.URL
-	// for _, storage := range req.SidStorage {
-	// 	if url, err = URL.Parse(sid_storage); err != nil {
-	// 		return nil, err
-	// 	}
-	// }
 	// 取第一个即可
 	sid_storage := req.SidStorage[0]
+	if sid_storage == "" {
+		err = fmt.Errorf("segs are not uploaded yet!")
+		return
+	}
 	clog.Trace(sid_storage)
 	var url *URL.URL
 	if url, err = URL.Parse(sid_storage); err != nil {

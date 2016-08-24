@@ -183,6 +183,7 @@ type TaskManager struct {
 	observers    map[uint32]TaskObserver
 	// task_state_routine_run bool
 	// task_state_chan        chan *transfer.TaskState
+	cache_timeout int
 }
 
 func NewTaskManager() *TaskManager {
@@ -190,6 +191,7 @@ func NewTaskManager() *TaskManager {
 	// t.tasks = make(map[string]*Task)
 	t.observers = make(map[uint32]TaskObserver)
 	// t.task_state_chan = make(chan *transfer.TaskState, 10)
+	t.cache_timeout = TASK_CACHE_TIMEOUT
 	return t
 }
 
@@ -224,7 +226,7 @@ func (self *TaskManager) AddTask(t *Task) {
 	// 		self.DelTask(t.TaskId)
 	// 	}
 	// }
-	if err := SaveTaskToCache(t); err != nil {
+	if err := SaveTaskToCache(t, self.cache_timeout); err != nil {
 		clog.Error("save task %s cache failed", t)
 	}
 
@@ -244,7 +246,7 @@ func (self *TaskManager) GetTask(taskid string) *Task {
 		clog.Error("load task(%s) from cache failed", taskid)
 	}
 	if t != nil {
-		UpdateTaskCache(t.TaskId)
+		UpdateTaskCache(t.TaskId, self.cache_timeout)
 	}
 	return t
 	// defer self.lock.Unlock()
@@ -372,14 +374,12 @@ func (self *TaskManager) handleTaskState(state *transfer.TaskState) (err error) 
 }
 
 // 侦听node接收的任务状态消息
-func (self *TaskManager) ListenTaskState() {
-	go func() {
-		for states := range trans.NodeMgr.StateChan {
-			for _, state := range states {
-				self.handleTaskState(state)
-			}
+func (self *TaskManager) TaskStateRoutine() {
+	for states := range trans.NodeMgr.StateChan {
+		for _, state := range states {
+			self.handleTaskState(state)
 		}
-	}()
+	}
 }
 
 // 根据相关信息停止任务
@@ -398,7 +398,11 @@ func (self *TaskManager) Scheduler() TaskScheduler {
 	return self.scheduler
 }
 
-func SaveTaskToCache(t *Task) (err error) {
+func (self *TaskManager) SetCacheTimeout(second int) {
+	self.cache_timeout = second
+}
+
+func SaveTaskToCache(t *Task, timeout int) (err error) {
 	conn := cache.Get()
 	defer conn.Close()
 	key := fmt.Sprintf("task#%s", t.TaskId)
@@ -406,17 +410,17 @@ func SaveTaskToCache(t *Task) (err error) {
 	if err != nil {
 		return err
 	}
-	if _, err = conn.Do("EXPIRE", key, TASK_CACHE_TIMEOUT); err != nil {
+	if _, err = conn.Do("EXPIRE", key, timeout); err != nil {
 		return err
 	}
 	return nil
 }
 
-func UpdateTaskCache(task_id string) error {
+func UpdateTaskCache(task_id string, timeout int) error {
 	conn := cache.Get()
 	defer conn.Close()
 	key := fmt.Sprintf("task#%s", task_id)
-	if _, err := conn.Do("EXPIRE", key, TASK_CACHE_TIMEOUT); err != nil {
+	if _, err := conn.Do("EXPIRE", key, timeout); err != nil {
 		return err
 	}
 	return nil
@@ -448,21 +452,36 @@ func LoadTaskFromCache(task_id string) (*Task, error) {
 }
 
 func LoadTasksByJobIdFromCache(job_id string) ([]*Task, error) {
+	return LoadTasksFromCache(func(t *Task) bool {
+		return t.JobId == job_id
+	})
+}
+
+func LoadTasksByPidFromCache(pid string) ([]*Task, error) {
+	return LoadTasksFromCache(func(t *Task) bool {
+		return t.Pid == pid
+	})
+}
+
+func LoadTasksFromCache(filter func(t *Task) bool) ([]*Task, error) {
 	conn := cache.Get()
 	defer conn.Close()
 	keys, err := redis.StringMap(conn.Do("KEYS", "task#*"))
 	if err != nil {
 		return nil, err
 	}
-	tasks := make([]*Task, 0, 5)
+	tasks := make([]*Task, 0, 10)
 	for _, key := range keys {
 		t, err := LoadTaskFromCache(key[5:])
 		if err != nil {
 			continue
 		}
-		if t.JobId == job_id {
-			tasks = append(tasks, t)
+		if filter != nil {
+			if !filter(t) {
+				continue
+			}
 		}
+		tasks = append(tasks, t)
 	}
 	return tasks, nil
 }

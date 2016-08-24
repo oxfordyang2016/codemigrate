@@ -91,7 +91,7 @@ func (self *NodeManager) AddNode(node *Node) {
 }
 
 func (self *NodeManager) DelNode(nid string) {
-	clog.Infof("Node Delete: %s\n", nid)
+	clog.Infof("Node Delete: %s", nid)
 	self.mux.Lock()
 	defer self.mux.Unlock()
 	node, ok := self.id_map[nid]
@@ -165,7 +165,6 @@ func NewNode(ws *websocket.Conn, server *WSServer) *Node {
 	n := new(Node)
 	n.server = server
 	n.SetWSConn(ws)
-	// n.rsp_chan = make(chan *TimeMessage)
 	n.rsp_sem = make(chan int)
 	n.rsp_msgs = make(map[uint32]*TimeMessage)
 	return n

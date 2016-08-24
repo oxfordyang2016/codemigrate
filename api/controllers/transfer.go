@@ -3,14 +3,10 @@ package controllers
 import (
 	"./../../pkg"
 	pkg_model "./../../pkg/models"
-	// trans "./../../transfer"
 	"./../../transfer/task"
 	"cydex"
 	"cydex/transfer"
-	"encoding/json"
-	// "github.com/astaxie/beego"
 	clog "github.com/cihub/seelog"
-	"io/ioutil"
 	"strconv"
 	"time"
 )
@@ -42,22 +38,12 @@ func (self *TransferController) Post() {
 	rsp := new(cydex.TransferRsp)
 
 	defer func() {
-		clog.Tracef("%+v", rsp)
 		self.Data["json"] = rsp
 		self.ServeJSON()
 	}()
 
-	r := self.Ctx.Request
-	defer r.Body.Close()
-	body, err := ioutil.ReadAll(r.Body)
-	if err != nil {
-		rsp.Error = cydex.ErrInvalidParam
-		return
-	}
-	clog.Trace("transfer ", string(body))
 	// 获取请求
-	if err := json.Unmarshal(body, req); err != nil {
-		clog.Error(err)
+	if err := self.FetchJsonBody(req); err != nil {
 		rsp.Error = cydex.ErrInvalidParam
 		return
 	}
@@ -115,7 +101,7 @@ func buildTaskDownloadReq(uid, pid, fid string, sids []string) *task.DownloadReq
 }
 
 func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cydex.TransferRsp) {
-	clog.Trace("download")
+	// clog.Info("process download ")
 	uid := self.GetString(":uid")
 	pid := pkg.GetUnpacker().GetPidFromFid(req.Fid)
 
@@ -218,7 +204,7 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 		return
 	}
 	if trans_rsp.Rsp.Code != cydex.OK {
-		clog.Tracef("dispatch upload failed, code:%d, reason:%s ", trans_rsp.Rsp.Code, trans_rsp.Rsp.Reason)
+		clog.Errorf("dispatch upload failed, code:%d, reason:%s ", trans_rsp.Rsp.Code, trans_rsp.Rsp.Reason)
 		rsp.Error = trans_rsp.Rsp.Code
 		return
 	}

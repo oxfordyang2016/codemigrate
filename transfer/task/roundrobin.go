@@ -41,7 +41,7 @@ func (self *RoundRobinUploadScheduler) DispatchUpload(req *UploadReq) (n *trans.
 	}
 	if !found {
 		n = nil
-		err = errors.New("No node found")
+		err = errors.New("No valid node to schedule")
 	}
 	return
 }
