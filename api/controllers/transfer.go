@@ -175,12 +175,27 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 	if len(req.SegIds) == 0 {
 		clog.Error("Array of Seg id shouldn't be empty!")
 		rsp.Error = cydex.ErrInvalidParam
+		return
 	}
 	uid := self.GetString(":uid")
-	pid := pkg.GetUnpacker().GetPidFromFid(req.Fid)
+	file_m, err := pkg_model.GetFile(req.Fid)
+	if err != nil || file_m == nil {
+		clog.Error(err)
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	pid := file_m.Pid
+	pkg_m, err := pkg_model.GetPkg(pid, false)
+	if err != nil || pkg_m == nil {
+		clog.Error(err)
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
 
 	task_req := new(task.UploadReq)
 	task_req.JobId = pkg.HashJob(uid, pid, cydex.UPLOAD)
+	task_req.FileSize = file_m.Size
+	task_req.PkgSize = pkg_m.Size
 	task_req.UploadTaskReq = &transfer.UploadTaskReq{
 		TaskId:  task.GenerateTaskId(),
 		Uid:     uid,
@@ -195,7 +210,7 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 		}
 	}
 
-	clog.Tracef("pid:%s, segs size:%d", task_req.Pid, task_req.UploadTaskReq.Size)
+	clog.Tracef("pid:%s, pkg_size:%d, file_size:%d,segs size:%d", task_req.Pid, task_req.PkgSize, task_req.FileSize, task_req.UploadTaskReq.Size)
 
 	trans_rsp, node, err := task.TaskMgr.DispatchUpload(task_req, DISPATCH_TIMEOUT)
 	if err != nil || node == nil || trans_rsp == nil {

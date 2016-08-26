@@ -38,7 +38,10 @@ type TaskObserver interface {
 
 type UploadReq struct {
 	*transfer.UploadTaskReq
-	JobId string
+	JobId         string
+	PkgSize       uint64
+	FileSize      uint64
+	restrict_mode int
 }
 
 // func NewUploadReq(r *transfer.UploadTaskReq, pid string) (req *UploadReq, err error) {

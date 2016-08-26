@@ -43,9 +43,7 @@ func Test_NodeManager(t *testing.T) {
 	Convey("Test Node Manager", t, func() {
 		Convey("Test Add Node", func() {
 			n := &Node{
-				Node: &models.Node{
-					Nid: "n1",
-				},
+				Nid:   "n1",
 				Token: "12345",
 				Host:  "192.168.2.3",
 			}
@@ -65,9 +63,7 @@ func Test_NodeManager(t *testing.T) {
 			var mo MyObserver
 			NodeMgr.AddObserver(&mo)
 			n := &Node{
-				Node: &models.Node{
-					Nid: "n1",
-				},
+				Nid:   "n1",
 				Token: "12345",
 				Host:  "192.168.2.3",
 			}
@@ -79,28 +75,20 @@ func Test_NodeManager(t *testing.T) {
 	})
 }
 
+func init() {
+	if TEST_DB != ":memory:" {
+		os.Remove(TEST_DB)
+	}
+	db.CreateEngine("sqlite3", TEST_DB, false)
+	models.SyncTables()
+}
+
 func Test_Node(t *testing.T) {
-	var err error
 	var seq uint32
 	var test_nid string
 	var test_token string
 
-	if TEST_DB != ":memory:" {
-		os.Remove(TEST_DB)
-	}
-
 	Convey("Test Node", t, func() {
-		Convey("DB Init using sqlite3", func() {
-			Convey("create", func() {
-				err = db.CreateEngine("sqlite3", TEST_DB, false)
-				So(err, ShouldBeNil)
-			})
-			Convey("Sync Tables", func() {
-				err = models.SyncTables()
-				So(err, ShouldBeNil)
-			})
-		})
-
 		Convey("Test Node register", func() {
 			Convey("normal register", func() {
 				seq++

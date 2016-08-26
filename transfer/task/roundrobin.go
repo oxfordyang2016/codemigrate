@@ -30,7 +30,7 @@ func (self *RoundRobinUploadScheduler) DispatchUpload(req *UploadReq) (n *trans.
 		if req == nil {
 			found = true
 		} else {
-			if n.Info.FreeStorage >= req.Size {
+			if n.Info.FreeStorage >= GetReqSize(req) {
 				found = true
 			}
 		}

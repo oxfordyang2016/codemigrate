@@ -84,6 +84,11 @@ func (self *NodeManager) AddNode(node *Node) {
 	clog.Infof("Node Add: %+v", node)
 	self.mux.Lock()
 	defer self.mux.Unlock()
+	n := self.id_map[node.Nid]
+	if n != nil {
+		// node with same nid exists, close the old connection.
+		n.Close(false)
+	}
 	self.id_map[node.Nid] = node
 	for _, o := range self.observers {
 		o.AddNode(node)
@@ -140,7 +145,9 @@ func NewTimeMessage(msg *transfer.Message) *TimeMessage {
 
 // TransferNode
 type Node struct {
-	*models.Node
+	Nid    string
+	ZoneId string
+	model  *models.Node
 
 	// 运行时数据
 	Host  string
@@ -154,11 +161,12 @@ type Node struct {
 	lock     sync.Mutex
 	seq      uint32
 	// rsp_chan chan *TimeMessage
-	rsp_sem  chan int
-	rsp_lock sync.Mutex
-	rsp_msgs map[uint32]*TimeMessage
-	server   *WSServer
-	closed   bool
+	rsp_sem     chan int
+	rsp_lock    sync.Mutex
+	rsp_msgs    map[uint32]*TimeMessage
+	server      *WSServer
+	closed      bool
+	remote_addr string
 }
 
 func NewNode(ws *websocket.Conn, server *WSServer) *Node {
@@ -178,6 +186,7 @@ func (self *Node) SetWSConn(ws *websocket.Conn) {
 	self.ws = ws
 	if ws != nil {
 		addr := ws.Request().RemoteAddr
+		self.remote_addr = addr
 		host, _, err := net.SplitHostPort(addr)
 		if err == nil {
 			self.Host = host
@@ -193,8 +202,8 @@ func (self *Node) Update(update_login_time bool) {
 		t := time.Now().Add(time.Duration(self.server.config.KeepaliveInterval) * time.Second * 3)
 		self.ws.SetDeadline(t)
 	}
-	if update_login_time && self.Node != nil {
-		self.Node.UpdateLoginTime(time.Now())
+	if update_login_time && self.model != nil {
+		self.model.UpdateLoginTime(time.Now())
 	}
 }
 
@@ -256,7 +265,7 @@ func (self *Node) handleRegister(msg, rsp *transfer.Message) (err error) {
 }
 
 func (self *Node) IsRegisted() bool {
-	return self.Node != nil
+	return self.model != nil
 }
 
 func (self *Node) IsLogined() bool {
@@ -272,21 +281,23 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 	}
 
 	nid := msg.From
-	n := NodeMgr.GetByNid(nid)
-	if n != nil {
-		// node with same nid is logined, and should kickout
-		n.Close(true)
-	}
-	if self.Node, err = models.GetNode(nid); err != nil {
+	// n := NodeMgr.GetByNid(nid)
+	// if n != nil {
+	// 	// node with same nid is logined, and should kickout
+	// 	n.Close(true)
+	// }
+	if self.model, err = models.GetNode(nid); err != nil {
 		return
 	}
-	if self.Node == nil {
+	if self.model == nil {
 		err = fmt.Errorf("%s is not registed", nid)
 		rsp.Rsp.Code = cydex.ErrInvalidParam
 		rsp.Rsp.Reason = err.Error()
 		return
 	}
 
+	self.Nid = nid
+	self.ZoneId = self.model.Zid
 	self.Token = uuid.New()
 	self.Info.Version = msg.Req.Login.Version
 	self.Info.NetAddr = msg.Req.Login.NetAddr
@@ -319,7 +330,7 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 	t, _ := time.Now().MarshalText()
 	rsp.Rsp.Login = &transfer.LoginRsp{
 		Token:                  self.Token,
-		ZoneId:                 self.Zid,
+		ZoneId:                 self.ZoneId,
 		AliveInterval:          alive_interval,
 		TransferNotifyInterval: transfer_notify_interval,
 		Time:    string(t),
@@ -422,32 +433,31 @@ func (self *Node) SendRequestSync(msg *transfer.Message, timeout time.Duration) 
 	return
 }
 
-func (self *Node) Close(close_conn bool) {
+func (self *Node) Close(del_from_mgr bool) {
 	self.lock.Lock()
 	self.closed = true
 	if self.rsp_sem != nil {
 		close(self.rsp_sem)
 	}
-	if close_conn && self.ws != nil {
+	if self.ws != nil {
 		self.ws.Close()
 	}
 	self.lock.Unlock()
 
-	if self.Node != nil {
+	if self.model != nil {
+		self.model.UpdateLogoutTime(time.Now())
+	}
+	if del_from_mgr {
 		NodeMgr.DelNode(self.Nid)
-		self.Node.UpdateLogoutTime(time.Now())
 	}
 }
 
 func (self *Node) String() string {
-	nid := ""
-	if self.Node != nil {
-		nid = self.Node.Nid
-		if len(nid) > 8 {
-			nid = nid[:8]
-		}
+	nid := self.Nid
+	if len(nid) > 8 {
+		nid = nid[:8]
 	}
-	return fmt.Sprintf("<Node(%s %s)>", nid, self.Host)
+	return fmt.Sprintf("<Node(%s %s)>", nid, self.remote_addr)
 }
 
 func (self *Node) OnlineDuration() time.Duration {

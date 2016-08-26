@@ -41,6 +41,20 @@ func GetFid(t *Task, req *UploadReq) string {
 	return ""
 }
 
+// 需要在restrict.Dispatchupload()之后调用
+func GetReqSize(req *UploadReq) uint64 {
+	switch req.restrict_mode {
+	case TASK_RESTRICT_NONE:
+		return req.Size
+	case TASK_RESTRICT_BY_FID:
+		return req.FileSize
+	case TASK_RESTRICT_BY_PID:
+		return req.PkgSize
+	default:
+		return 0
+	}
+}
+
 // 有约束的上传任务分配器
 type RestrictUploadScheduler struct {
 	restrict_mode int
@@ -87,6 +101,8 @@ func (self *RestrictUploadScheduler) DispatchUpload(req *UploadReq) (n *trans.No
 		return nil, nil
 	}
 
+	req.restrict_mode = self.restrict_mode
+
 	defer self.lock.Unlock()
 	self.lock.Lock()
 
@@ -95,7 +111,7 @@ func (self *RestrictUploadScheduler) DispatchUpload(req *UploadReq) (n *trans.No
 	if r != nil && r.nid != "" {
 		node := trans.NodeMgr.GetByNid(r.nid)
 		if node != nil {
-			if node.Info.FreeStorage >= req.Size {
+			if node.Info.FreeStorage > GetReqSize(req) {
 				r.Update()
 				n = node
 			}

@@ -83,3 +83,7 @@ func (n *Node) UpdateLogoutTime(t time.Time) error {
 	}
 	return nil
 }
+
+func (self *Node) TableName() string {
+	return "transfer_node"
+}

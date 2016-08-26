@@ -36,3 +36,7 @@ func GetZone(zid string) (z *Zone, err error) {
 	}
 	return z, nil
 }
+
+func (self *Zone) TableName() string {
+	return "transfer_zone"
+}

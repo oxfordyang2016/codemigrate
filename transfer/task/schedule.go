@@ -57,10 +57,11 @@ func (self *DefaultScheduler) DispatchUpload(req *UploadReq) (n *trans.Node, err
 	if err != nil {
 		// log
 	}
-	// var first_node *trans.Node
-	if n == nil {
-		n, err = self.u_proxy.DispatchUpload(req)
+	if n != nil {
+		return
 	}
+
+	n, err = self.u_proxy.DispatchUpload(req)
 	if err != nil {
 		// log
 	}
