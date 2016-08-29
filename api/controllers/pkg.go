@@ -510,6 +510,23 @@ func (self *PkgsController) Post() {
 	self.createPkg(req, rsp)
 }
 
+// 批量删除包裹
+func (self *PkgsController) Delete() {
+	req := new(cydex.DelPkgsReq)
+	rsp := new(cydex.DelPkgsRsp)
+
+	defer func() {
+		self.Data["json"] = rsp
+		self.ServeJSON()
+	}()
+	uid := self.GetString(":uid")
+	if uid == "" {
+		rsp.Error = cydex.ErrInvalidParam
+		return
+	}
+	self.fetchJsonBody(&pkg_list)
+}
+
 // 创建包裹
 func (self *PkgsController) createPkg(req *cydex.CreatePkgReq, rsp *cydex.CreatePkgRsp) {
 	if !req.Verify() {
@@ -654,6 +671,8 @@ func (self *PkgController) Get() {
 			job, err := pkg_model.GetJob(hashid, true)
 			if err == nil && job != nil {
 				rsp.Pkg, _ = aggregate(job.Pkg)
+			} else {
+				rsp.Error = cydex.ErrNotAllowed
 			}
 		}
 	} else {
@@ -664,6 +683,8 @@ func (self *PkgController) Get() {
 			job := jobs[0]
 			job.GetPkg(true)
 			rsp.Pkg, _ = aggregate(job.Pkg)
+		} else {
+			rsp.Error = cydex.ErrPackageNotExisted
 		}
 	}
 }
