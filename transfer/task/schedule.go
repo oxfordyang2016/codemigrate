@@ -33,11 +33,11 @@ type DefaultScheduler struct {
 	d_nas      *NasDownloadScheduler
 }
 
-func NewDefaultScheduler() *DefaultScheduler {
+func NewDefaultScheduler(restrict_mode int) *DefaultScheduler {
 	n := new(DefaultScheduler)
 	rr := NewRoundRobinUploadScheduler()
 	n.u_proxy = rr
-	n.u_restrict = NewRestrictUploadScheduler(TASK_RESTRICT_BY_PID)
+	n.u_restrict = NewRestrictUploadScheduler(restrict_mode)
 	n.d_file = NewFileDownloadScheduler()
 	n.d_nas = NewNasDownloadScheduler()
 

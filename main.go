@@ -117,6 +117,7 @@ func setupPkg(cfg *ini.File) (err error) {
 	var unpacker pkg.Unpacker
 	unpacker_str := sec.Key("unpacker").MustString("default")
 	clog.Infof("[setup pkg] unpacker: %s", unpacker_str)
+
 	switch unpacker_str {
 	case "default":
 		sec_unpacker, err := cfg.GetSection("default_unpacker")
@@ -147,11 +148,25 @@ func setupTask(cfg *ini.File) (err error) {
 	if err != nil {
 		return err
 	}
+
+	var restrict_mode int
+	restrict_str := sec.Key("restrict_mode").MustString("pid")
+	clog.Infof("[setup task] restrict_mode: %s", restrict_str)
+	switch restrict_str {
+	case "pid":
+		restrict_mode = task.TASK_RESTRICT_BY_PID
+	case "fid":
+		restrict_mode = task.TASK_RESTRICT_BY_FID
+	default:
+		err = fmt.Errorf("Unknow restrict mode %s", restrict_str)
+		return
+	}
+
 	scheduler_str := sec.Key("scheduler").MustString("default")
 	clog.Infof("[setup task] scheduler:%s", scheduler_str)
 	switch scheduler_str {
 	case "default":
-		task.TaskMgr.SetScheduler(task.NewDefaultScheduler())
+		task.TaskMgr.SetScheduler(task.NewDefaultScheduler(restrict_mode))
 	default:
 		err = fmt.Errorf("Unsupport task scheduler name:%s", scheduler_str)
 		return
