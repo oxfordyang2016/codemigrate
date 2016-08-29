@@ -8,13 +8,13 @@ type File struct {
 	Id         uint64 `xorm:"pk autoincr"`
 	Fid        string `xorm:"varchar(24) notnull unique"`
 	Pid        string `xorm:"varchar(22)"`
-	Name       string `xorm:"varchar(30) notnull"`
-	Path       string `xorm:"varchar(128) notnull"`
+	Name       string `xorm:"varchar(255) notnull"`
+	Path       string `xorm:"TEXT notnull"`
 	Type       int    `xorm:"Int notnull default(1)"`
 	Size       uint64 `xorm:"BigInt notnull"`
 	Mode       int    `xorm:'Int default(0)'`
-	EigenValue string `xorm:"varchar(80)"`
-	PathAbs    string `xorm:"varchar(255)"`
+	EigenValue string `xorm:"varchar(255)"`
+	PathAbs    string `xorm:"TEXT"`
 	NumSegs    int    `xorm:"not null"`
 	// ServerPath string    `xorm:"varchar(30)"`
 	CreateAt  time.Time `xorm:"DateTime created"`
