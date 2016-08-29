@@ -2,10 +2,12 @@ package controllers
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/astaxie/beego"
 	clog "github.com/cihub/seelog"
 	"io/ioutil"
 	"strconv"
+	"time"
 )
 
 var (
@@ -62,4 +64,9 @@ func (self *BaseController) FetchJsonBody(v interface{}) error {
 func SetupBodyShow(req, rsp bool) {
 	ShowReqBody = req
 	ShowRspBody = rsp
+}
+
+func MarshalUTCTime(t time.Time) string {
+	utc := t.UTC()
+	return fmt.Sprintf("%d-%d-%d %d:%d:%d", utc.Year(), utc.Month(), utc.Day(), utc.Hour(), utc.Minute(), utc.Second())
 }
