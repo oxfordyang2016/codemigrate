@@ -648,13 +648,19 @@ func (self *PkgController) Get() {
 	pid := self.GetString(":pid")
 
 	if self.UserLevel != cydex.USER_LEVEL_ADMIN {
+		found := false
 		types := []int{cydex.UPLOAD, cydex.DOWNLOAD}
 		for _, t := range types {
 			hashid := pkg.HashJob(uid, pid, t)
 			job, err := pkg_model.GetJob(hashid, true)
 			if err == nil && job != nil {
+				found = true
 				rsp.Pkg, _ = aggregate(job.Pkg)
+				break
 			}
+		}
+		if !found {
+			rsp.Error = cydex.ErrNotAllowed
 		}
 	} else {
 		// 管理员用户
@@ -664,6 +670,8 @@ func (self *PkgController) Get() {
 			job := jobs[0]
 			job.GetPkg(true)
 			rsp.Pkg, _ = aggregate(job.Pkg)
+		} else {
+			rsp.Error = cydex.ErrPackageNotExisted
 		}
 	}
 }
