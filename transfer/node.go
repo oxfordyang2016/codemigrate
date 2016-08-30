@@ -117,6 +117,17 @@ func (self *NodeManager) AddObserver(observer NodeObserver) {
 	self.observers = append(self.observers, observer)
 }
 
+func (self *NodeManager) WalkNodes(walk_fun func(n *Node)) {
+	if walk_fun == nil {
+		return
+	}
+	self.mux.Lock()
+	defer self.mux.Unlock()
+	for _, node := range self.id_map {
+		walk_fun(node)
+	}
+}
+
 type NodeInfo struct {
 	Version           string
 	NetAddr           string

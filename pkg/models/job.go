@@ -13,15 +13,12 @@ const (
 )
 
 type Job struct {
-	Id    uint64 `xorm:"pk autoincr"`
-	JobId string `xorm:"unique not null"`
-	Type  int    `xorm:"int"` // cydex.UPLOAD or cydex.DOWNLOAD
-	Pid   string `xorm:"varchar(22) not null"`
-	Pkg   *Pkg   `xorm:"-"`
-	Uid   string `xorm:"varchar(12) not null"`
-	// Finished bool      `xorm:"BOOL not null default(0)"`
-	// State    int       `xorm:"int not null default(0)"`
-	// FinishAt time.Time `xorm:"DateTime"`
+	Id       uint64    `xorm:"pk autoincr"`
+	JobId    string    `xorm:"unique not null"`
+	Type     int       `xorm:"int"` // cydex.UPLOAD or cydex.DOWNLOAD
+	Pid      string    `xorm:"varchar(22) not null"`
+	Pkg      *Pkg      `xorm:"-"`
+	Uid      string    `xorm:"varchar(12) not null"`
 	CreateAt time.Time `xorm:"DateTime created"`
 	UpdateAt time.Time `xorm:"DateTime updated"`
 	SoftDel  int       `xorm:"BOOL not null default(0)"`
@@ -147,29 +144,6 @@ func DeleteJob(jobid string) (err error) {
 	return nil
 }
 
-// // 按照Pid查询下载的包,
-// // @param with_details 是否包含文件详细信息
-// // @param include_finished 是否包含已结束的包
-// func GetDownloadsByPid(pid string, with_details, include_finished bool) ([]*Download, error) {
-// 	ua := make([]*Download, 0)
-// 	var err error
-// 	sess := DB().Where("pid=?", pid)
-// 	if !include_finished {
-// 		sess = sess.Where("finished=0")
-// 	}
-// 	if err = sess.Find(&ua); err != nil {
-// 		return nil, err
-// 	}
-// 	if with_details {
-// 		for _, u := range ua {
-// 			if err = u.GetDetails(); err != nil {
-// 				return nil, err
-// 			}
-// 		}
-// 	}
-// 	return ua, nil
-// }
-
 func (self *Job) TableName() string {
 	return "package_job"
 }
@@ -192,28 +166,6 @@ func (self *Job) CountUnfinishedDetails() int64 {
 	n, _ := CountUnfinishedJobDetails(self.JobId)
 	return n
 }
-
-// func (self *Job) SetState(state int) error {
-// 	self.State = state
-// 	if state == cydex.TRANSFER_STATE_DONE {
-// 		self.FinishAt = time.Now()
-// 	}
-// 	_, err := DB().Where("job_id=?", self.JobId).Cols("state", "finish_at").Update(self)
-// 	return err
-// }
-
-// func (self *Job) Finish() error {
-// 	j := &Job{
-// 		Finished: true,
-// 		FinishAt: time.Now(),
-// 	}
-// 	_, err := DB().Where("job_id=?", self.JobId).Cols("finished", "finish_at").Update(j)
-// 	if err == nil {
-// 		self.Finished = j.Finished
-// 		self.FinishAt = j.FinishAt
-// 	}
-// 	return err
-// }
 
 func (self *Job) GetDetail(fid string) *JobDetail {
 	if self.Details == nil {

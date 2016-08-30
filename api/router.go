@@ -13,6 +13,7 @@ func setupRoute() {
 	beego.Router("/:uid/pkg/:pid", &c.PkgController{})
 	beego.Router("/:uid/pkg/:pid/:fid", &c.FileController{})
 	beego.Router("/:uid/transfer", &c.TransferController{})
+	beego.Router("/:uid/log", &c.LogController{})
 }
 
 func setupFilter() {

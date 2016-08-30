@@ -14,7 +14,6 @@ import (
 
 func fillTransferState(state *cydex.TransferState, uid string, size uint64, jd *pkg_model.JobDetail) {
 	state.Uid = uid
-	// state.Username = "placehold.cydex"
 	state.State = jd.State
 	if size > 0 {
 		state.Percent = int(jd.FinishedSize * 100 / size)
@@ -67,9 +66,7 @@ func aggregate(pkg_m *pkg_model.Pkg) (pkg_c *cydex.Pkg, err error) {
 		file.Filename = file_m.Name
 		file.Path = file_m.Path
 		file.Type = file_m.Type
-		// file.Chara = file_m.EigenValue
-		// fake
-		file.Chara = "NULL"
+		file.Chara = file_m.EigenValue
 		file.PathAbs = file_m.PathAbs
 		file.Mode = file_m.Mode
 		file.SetSize(file_m.Size)
@@ -593,7 +590,6 @@ func (self *PkgsController) createPkg(req *cydex.CreatePkgReq, rsp *cydex.Create
 	var (
 		err           error
 		uid, fid, pid string
-		file_o        *cydex.File
 	)
 	uid = self.GetString(":uid")
 	if uid == "" {
@@ -616,7 +612,7 @@ func (self *PkgsController) createPkg(req *cydex.CreatePkgReq, rsp *cydex.Create
 		return
 	}
 
-	pkg_o := new(cydex.Pkg)
+	// pkg_o := new(cydex.Pkg)
 	pid = unpacker.GeneratePid(uid, req.Title, req.Notes)
 	size := uint64(0)
 	for _, f := range req.Files {
@@ -639,29 +635,16 @@ func (self *PkgsController) createPkg(req *cydex.CreatePkgReq, rsp *cydex.Create
 		return
 	}
 
-	pkg_o.Pid = pid
-	pkg_o.Title = req.Title
-	pkg_o.Notes = req.Notes
-	pkg_o.Date = MarshalUTCTime(time.Now())
-	pkg_o.NumFiles = len(req.Files)
-	pkg_o.EncryptionType = pkg_m.EncryptionType
-	pkg_o.MetaData = pkg_m.MetaData
-
 	for i, f := range req.Files {
 		if fid, err = unpacker.GenerateFid(pid, i, f); err != nil {
 			rsp.Error = cydex.ErrInnerServer
 			return
 		}
-		file_o = new(cydex.File)
-		file_o.Fid = fid
-		file_o.SimpleFile = *f
-		file_o.Segs, err = unpacker.GenerateSegs(fid, f)
+		segs, err := unpacker.GenerateSegs(fid, f)
 		if err != nil {
 			rsp.Error = cydex.ErrInnerServer
 			return
 		}
-		file_o.DownloadState = make([]*cydex.TransferState, 0)
-		file_o.UploadState = make([]*cydex.TransferState, 0)
 		file_m := &pkg_model.File{
 			Fid:        fid,
 			Pid:        pid,
@@ -672,13 +655,13 @@ func (self *PkgsController) createPkg(req *cydex.CreatePkgReq, rsp *cydex.Create
 			Type:       f.Type,
 			PathAbs:    f.PathAbs,
 			EigenValue: f.Chara,
-			NumSegs:    len(file_o.Segs),
+			NumSegs:    len(segs),
 		}
 		if _, err = session.Insert(file_m); err != nil {
 			rsp.Error = cydex.ErrInnerServer
 			return
 		}
-		for _, s := range file_o.Segs {
+		for _, s := range segs {
 			seg_m := &pkg_model.Seg{
 				Sid:  s.Sid,
 				Fid:  fid,
@@ -689,10 +672,8 @@ func (self *PkgsController) createPkg(req *cydex.CreatePkgReq, rsp *cydex.Create
 				return
 			}
 		}
-		pkg_o.Files = append(pkg_o.Files, file_o)
 	}
 	session.Commit()
-	rsp.Pkg = pkg_o
 
 	// Dispatch jobs
 	pkg.JobMgr.CreateJob(uid, pid, cydex.UPLOAD)
@@ -700,6 +681,12 @@ func (self *PkgsController) createPkg(req *cydex.CreatePkgReq, rsp *cydex.Create
 		for _, r := range req.Receivers {
 			pkg.JobMgr.CreateJob(r.Uid, pid, cydex.DOWNLOAD)
 		}
+	}
+
+	rsp.Pkg, err = aggregate(pkg_m)
+	if err != nil {
+		rsp.Error = cydex.ErrInnerServer
+		return
 	}
 }
 
@@ -968,122 +955,71 @@ func (self *FileController) Get() {
 		return
 	}
 
+	var job *pkg_model.Job
 	// 管理员
 	if self.UserLevel == cydex.USER_LEVEL_ADMIN {
 		clog.Trace("admin get file")
 		jobs, _ := pkg_model.GetJobsByPid(pid, cydex.UPLOAD, nil)
 		if len(jobs) > 0 {
-			job := jobs[0]
+			job = jobs[0]
 			job.GetPkg(true)
 
-			file := new(cydex.File)
-
-			file.Fid = file_m.Fid
-			file.Filename = file_m.Name
-			file.SetSize(file_m.Size)
-			file.Path = file_m.Path
-			file.Type = file_m.Type
-			file.Chara = file_m.EigenValue
-			file.PathAbs = file_m.PathAbs
-
-			uploads_jobs, err := pkg_model.GetJobsByPid(pid, cydex.UPLOAD, nil)
-			if err != nil {
-				rsp.Error = cydex.ErrInnerServer
-				return
-			}
-			for _, u_job := range uploads_jobs {
-				jd := pkg.JobMgr.GetJobDetail(u_job.JobId, fid)
-				if jd != nil {
-					state := new(cydex.TransferState)
-					fillTransferState(state, u_job.Uid, file_m.Size, jd)
-					file.UploadState = append(file.UploadState, state)
-				}
-			}
-
-			download_jobs, err := pkg_model.GetJobsByPid(pid, cydex.DOWNLOAD, nil)
-			if err != nil {
-				rsp.Error = cydex.ErrInnerServer
-				return
-			}
-			for _, d_job := range download_jobs {
-				jd := pkg.JobMgr.GetJobDetail(d_job.JobId, fid)
-				if jd != nil {
-					state := new(cydex.TransferState)
-					fillTransferState(state, d_job.Uid, file_m.Size, jd)
-					file.DownloadState = append(file.DownloadState, state)
-				}
-			}
-			rsp.File = file
-			return
 		}
-	} else {
-		// 普通用户
-		// 下载
-		{
-			hashid := pkg.HashJob(uid, pid, cydex.DOWNLOAD)
-			job := pkg.JobMgr.GetJob(hashid)
+	} else { // 普通用户
+		types := [2]int{cydex.DOWNLOAD, cydex.UPLOAD}
+		for _, typ := range types {
+			hashid := pkg.HashJob(uid, pid, typ)
+			job, _ = pkg_model.GetJob(hashid, true)
 			if job != nil {
-				file := new(cydex.File)
-				file.Fid = file_m.Fid
-				file.Filename = file_m.Name
-				file.SetSize(file_m.Size)
-				file.Path = file_m.Path
-				file.Type = file_m.Type
-				file.Chara = file_m.EigenValue
-				file.PathAbs = file_m.PathAbs
-
-				uploads_jobs, err := pkg_model.GetJobsByPid(pid, cydex.UPLOAD, nil)
-				if err != nil {
-					rsp.Error = cydex.ErrInnerServer
-					return
-				}
-				for _, u_job := range uploads_jobs {
-					jd := pkg.JobMgr.GetJobDetail(u_job.JobId, fid)
-					if jd != nil {
-						state := new(cydex.TransferState)
-						fillTransferState(state, u_job.Uid, file_m.Size, jd)
-						file.UploadState = append(file.UploadState, state)
-					}
-				}
-				rsp.File = file
-				return
-			}
-		}
-
-		// 上传
-		{
-			hashid := pkg.HashJob(uid, pid, cydex.UPLOAD)
-			job := pkg.JobMgr.GetJob(hashid)
-			if job != nil {
-				file := new(cydex.File)
-				file.Fid = file_m.Fid
-				file.Filename = file_m.Name
-				file.SetSize(file_m.Size)
-				file.Path = file_m.Path
-				file.Type = file_m.Type
-				file.Chara = file_m.EigenValue
-				file.PathAbs = file_m.PathAbs
-
-				download_jobs, err := pkg_model.GetJobsByPid(pid, cydex.DOWNLOAD, nil)
-				if err != nil {
-					rsp.Error = cydex.ErrInnerServer
-					return
-				}
-				for _, d_job := range download_jobs {
-					jd := pkg.JobMgr.GetJobDetail(d_job.JobId, fid)
-					if jd != nil {
-						state := new(cydex.TransferState)
-						fillTransferState(state, d_job.Uid, file_m.Size, jd)
-						file.DownloadState = append(file.DownloadState, state)
-					}
-				}
-				rsp.File = file
-				return
+				break
 			}
 		}
 	}
 
-	rsp.Error = cydex.ErrPackageNotExisted
+	if job == nil {
+		rsp.Error = cydex.ErrPackageNotExisted
+		return
+	}
+
+	file := new(cydex.File)
+
+	file.Fid = file_m.Fid
+	file.Filename = file_m.Name
+	file.SetSize(file_m.Size)
+	file.Path = file_m.Path
+	file.Type = file_m.Type
+	file.Chara = file_m.EigenValue
+	file.PathAbs = file_m.PathAbs
+
+	uploads_jobs, err := pkg_model.GetJobsByPid(pid, cydex.UPLOAD, nil)
+	if err != nil {
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	for _, u_job := range uploads_jobs {
+		jd := pkg.JobMgr.GetJobDetail(u_job.JobId, fid)
+		if jd != nil {
+			state := new(cydex.TransferState)
+			fillTransferState(state, u_job.Uid, file_m.Size, jd)
+			file.UploadState = append(file.UploadState, state)
+		}
+	}
+
+	download_jobs, err := pkg_model.GetJobsByPid(pid, cydex.DOWNLOAD, nil)
+	if err != nil {
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	for _, d_job := range download_jobs {
+		jd := pkg.JobMgr.GetJobDetail(d_job.JobId, fid)
+		if jd != nil {
+			state := new(cydex.TransferState)
+			fillTransferState(state, d_job.Uid, file_m.Size, jd)
+			file.DownloadState = append(file.DownloadState, state)
+		}
+	}
+	rsp.File = file
+	return
 }
 
 // 是否在传输
