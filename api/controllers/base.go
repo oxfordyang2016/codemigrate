@@ -68,5 +68,5 @@ func SetupBodyShow(req, rsp bool) {
 
 func MarshalUTCTime(t time.Time) string {
 	utc := t.UTC()
-	return fmt.Sprintf("%d-%d-%d %d:%d:%d", utc.Year(), utc.Month(), utc.Day(), utc.Hour(), utc.Minute(), utc.Second())
+	return fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", utc.Year(), utc.Month(), utc.Day(), utc.Hour(), utc.Minute(), utc.Second())
 }
