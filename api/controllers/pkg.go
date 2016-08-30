@@ -509,6 +509,79 @@ func (self *PkgsController) Post() {
 	self.createPkg(req, rsp)
 }
 
+// 批量删除包裹
+func (self *PkgsController) Delete() {
+	req := new(cydex.DelPkgsReq)
+	rsp := new(cydex.DelPkgsRsp)
+
+	defer func() {
+		self.Data["json"] = rsp
+		self.ServeJSON()
+	}()
+
+	uid := self.GetString(":uid")
+	if uid == "" {
+		rsp.Error = cydex.ErrInvalidParam
+		return
+	}
+	if err := self.FetchJsonBody(req); err != nil {
+		rsp.Error = cydex.ErrInvalidParam
+		return
+	}
+	if len(req.PkgList) == 0 {
+		rsp.Error = cydex.ErrInvalidParam
+		return
+	}
+
+	pid_list := req.PkgList
+	jobs := make([]*pkg_model.Job, 0, len(pid_list))
+
+	// 普通用户
+	if self.UserLevel != cydex.USER_LEVEL_ADMIN {
+		for _, pid := range pid_list {
+			hashid := pkg.HashJob(uid, pid, cydex.UPLOAD)
+			job, _ := pkg_model.GetJob(hashid, true)
+			if job != nil {
+				jobs = append(jobs, job)
+			}
+		}
+	} else { // 管理员
+		for _, pid := range pid_list {
+			j, _ := pkg_model.GetJobsByPid(pid, cydex.UPLOAD, nil)
+			if j != nil {
+				j[0].GetPkg(true)
+				jobs = append(jobs, j[0])
+			}
+		}
+	}
+
+	// 判断是否在传输, 取出不传输的jobs
+	ret, err := isJobsTransferring(jobs)
+	if err != nil {
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	var avail_jobs []*pkg_model.Job
+	for i, b := range ret {
+		if !b {
+			avail_jobs = append(avail_jobs, jobs[i])
+		}
+	}
+
+	rsp.NumDelPkgs = len(avail_jobs)
+
+	for _, job_m := range avail_jobs {
+		deleteJob(job_m)
+	}
+
+	go func() {
+		for _, job := range avail_jobs {
+			job.GetPkg(true)
+			freePkgSpace(job)
+		}
+	}()
+}
+
 // 创建包裹
 func (self *PkgsController) createPkg(req *cydex.CreatePkgReq, rsp *cydex.CreatePkgRsp) {
 	if !req.Verify() {
@@ -744,7 +817,7 @@ func (self *PkgController) Put() {
 	rsp.Pkg, _ = aggregate(job_m.Pkg)
 }
 
-// TODO 删除包裹, 释放空间
+// 删除包裹, 释放空间
 func (self *PkgController) Delete() {
 	uid := self.GetString(":uid")
 	pid := self.GetString(":pid")
@@ -778,39 +851,47 @@ func (self *PkgController) Delete() {
 	}
 
 	// 是否在传输
-	tasks, err := task.LoadTasksByPidFromCache(pid)
+	ret, err := isJobTransferring(job_m)
 	if err != nil {
 		rsp.Error = cydex.ErrInnerServer
 		return
 	}
-	if len(tasks) > 0 {
+	if ret {
 		rsp.Error = cydex.ErrActivePackage
 		return
 	}
 
+	deleteJob(job_m)
+	go freePkgSpace(job_m)
+}
+
+func deleteJob(job *pkg_model.Job) {
+	if job == nil {
+		return
+	}
+
 	//上传Job软删除
-	job_m.SoftDelete(pkg_model.SOFT_DELETE_TAG)
+	if job.Type == cydex.UPLOAD {
+		job.SoftDelete(pkg_model.SOFT_DELETE_TAG)
+	}
+
 	// 下载Job真删除
-	download_jobs, _ := pkg_model.GetJobsByPid(pid, cydex.DOWNLOAD, nil)
+	download_jobs, _ := pkg_model.GetJobsByPid(job.Pid, cydex.DOWNLOAD, nil)
 	for _, j := range download_jobs {
 		// delete resource in cache and db
-		if err := pkg.JobMgr.DeleteJob(j.Uid, pid, cydex.DOWNLOAD); err != nil {
+		if err := pkg.JobMgr.DeleteJob(j.Uid, j.Pid, cydex.DOWNLOAD); err != nil {
 			clog.Error(err)
 			continue
 		}
 	}
-
-	go deletePkg(job_m)
 }
 
-func deletePkg(job *pkg_model.Job) {
+func freePkgSpace(job *pkg_model.Job) {
 	// 删除文件, 释放空间
 	if job == nil {
 		return
 	}
-	if job.Pkg.Files == nil {
-		job.Pkg.GetFiles(true)
-	}
+	job.Pkg.GetFiles(true)
 	pid := job.Pid
 	c := make(chan int)
 	const timeout = 5 * time.Second
@@ -1003,4 +1084,37 @@ func (self *FileController) Get() {
 	}
 
 	rsp.Error = cydex.ErrPackageNotExisted
+}
+
+// 是否在传输
+func isJobTransferring(job *pkg_model.Job) (bool, error) {
+	tasks, err := task.LoadTasksByPidFromCache(job.Pid)
+	if err != nil {
+		return false, err
+	}
+	if len(tasks) > 0 {
+		return true, nil
+	}
+	return false, nil
+}
+
+func isJobsTransferring(jobs []*pkg_model.Job) ([]bool, error) {
+	tasks, err := task.LoadTasksFromCache(nil)
+	if err != nil {
+		return nil, err
+	}
+
+	var ret []bool
+	var found bool
+	for _, job := range jobs {
+		found = false
+		for _, t := range tasks {
+			if job.Pid == t.Pid {
+				found = true
+				break
+			}
+		}
+		ret = append(ret, found)
+	}
+	return ret, nil
 }
