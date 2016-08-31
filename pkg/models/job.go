@@ -230,8 +230,9 @@ type JobDetail struct {
 	UpdateAt        time.Time `xorm:"DateTime updated"`
 
 	// runtime
-	Bitrate uint64          `xorm:"-"`
-	Segs    map[string]*Seg `xorm:"-"` //sid->seg
+	Bitrate    uint64          `xorm:"-"`
+	CurSegSize uint64          `xorm:"-"`
+	Segs       map[string]*Seg `xorm:"-"` //sid->seg
 }
 
 // 批量创建

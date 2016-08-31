@@ -67,13 +67,15 @@ func updateJobDetail(jd *models.JobDetail, state *transfer.TaskState, seg_state 
 		} else {
 			jd.FinishedSize += state.TotalBytes
 		}
+		jd.CurSegSize = 0
 		jd.NumFinishedSegs++
 		save = true
 	} else {
+		jd.CurSegSize = state.TotalBytes
 		jd.State = seg_state
 	}
 
-	clog.Tracef("%s update: %d %d", jd, jd.NumFinishedSegs, jd.FinishedSize)
+	clog.Tracef("%s update: %d %d %d", jd, jd.NumFinishedSegs, jd.FinishedSize, jd.CurSegSize)
 
 	// jd is finished?
 	if jd.NumFinishedSegs == jd.File.NumSegs {
@@ -85,33 +87,6 @@ func updateJobDetail(jd *models.JobDetail, state *transfer.TaskState, seg_state 
 
 	return
 }
-
-// func updateJobDetail(jd *models.JobDetail) {
-// 	// finished size
-// 	total := uint64(0)
-// 	finished_segs := 0
-// 	for sid, s := range jd.Segs {
-// 		clog.Tracef("%s %s %d", sid, s.Sid, s.Size)
-// 		total += s.Size
-// 		if s.State == cydex.TRANSFER_STATE_DONE {
-// 			finished_segs++
-// 		}
-// 	}
-// 	clog.Tracef("finished size: %d, finished segs:%d", total, finished_segs)
-// 	jd.FinishedSize = total
-// 	jd.NumFinishedSegs = finished_segs
-//
-// 	for _, s := range jd.Segs {
-// 		if s.State == cydex.TRANSFER_STATE_DOING {
-// 			jd.State = cydex.TRANSFER_STATE_DOING
-// 			break
-// 		}
-// 		if s.State == cydex.TRANSFER_STATE_PAUSE {
-// 			jd.State = cydex.TRANSFER_STATE_PAUSE
-// 			break
-// 		}
-// 	}
-// }
 
 type Track struct {
 	// int没啥用,这里当作set使用

@@ -389,7 +389,7 @@ func (self *TaskManager) TaskStateRoutine() {
 func (self *TaskManager) StopTasks(jobid string) {
 	tasks, err := LoadTasksByJobIdFromCache(jobid)
 	if err != nil {
-		clog.Error("load tasks by jobid(%s) error", jobid)
+		clog.Errorf("load tasks by jobid(%s) error, %v", jobid, err)
 		return
 	}
 	for _, t := range tasks {
@@ -469,7 +469,7 @@ func LoadTasksByPidFromCache(pid string) ([]*Task, error) {
 func LoadTasksFromCache(filter func(t *Task) bool) ([]*Task, error) {
 	conn := cache.Get()
 	defer conn.Close()
-	keys, err := redis.StringMap(conn.Do("KEYS", "task#*"))
+	keys, err := redis.Strings(conn.Do("KEYS", "task#*"))
 	if err != nil {
 		return nil, err
 	}

@@ -35,7 +35,7 @@ type DefaultUnpacker struct {
 
 // min_seg_size: 最小分片size(bytes) max_seg_num: 最大分片数
 func NewDefaultUnpacker(min_seg_size uint64, max_seg_num uint) *DefaultUnpacker {
-	return &DefaultUnpacker{min_seg_size, max_seg_num, min_seg_size * uint64(max_seg_num), 0}
+	return &DefaultUnpacker{min_seg_size, max_seg_num, min_seg_size * uint64(max_seg_num), 1}
 }
 
 func (self *DefaultUnpacker) GeneratePid(uid string, title, notes string) (pid string) {

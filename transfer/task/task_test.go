@@ -43,6 +43,11 @@ func Test_TaskManager(t *testing.T) {
 			}
 			TaskMgr.AddTask(t1)
 			So(fo.cnt, ShouldEqual, 1)
+
+			tasks, err := LoadTasksFromCache(nil)
+			So(err, ShouldBeNil)
+			So(tasks, ShouldNotBeNil)
+
 			TaskMgr.DelTask("t0")
 			So(fo.cnt, ShouldEqual, 0)
 

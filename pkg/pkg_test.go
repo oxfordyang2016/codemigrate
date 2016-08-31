@@ -22,7 +22,7 @@ func Test_DefaultUnpacker(t *testing.T) {
 			var err error
 			fid, err = U.GenerateFid(pid, 10, nil)
 			So(err, ShouldBeNil)
-			So(fid, ShouldEqual, "1234567890ab1234567810")
+			So(fid, ShouldEqual, "1234567890ab1234567811")
 			for i := 0; i < 99; i++ {
 				fid, err = U.GenerateFid(pid, i, nil)
 				So(err, ShouldBeNil)
@@ -65,7 +65,7 @@ func Test_DefaultUnpacker(t *testing.T) {
 					segs, err = U.GenerateSegs("ffff", f)
 					So(len(segs), ShouldEqual, 1)
 					So(segs[0].Size, ShouldEqual, 128*1024)
-					So(segs[0].Sid, ShouldEqual, "ffff00000000")
+					So(segs[0].Sid, ShouldEqual, "ffff00000001")
 					So(err, ShouldBeNil)
 				})
 				Convey("300M", func() {
@@ -76,7 +76,7 @@ func Test_DefaultUnpacker(t *testing.T) {
 					segs, err = U.GenerateSegs("ffff", f)
 					So(len(segs), ShouldEqual, 6)
 					So(segs[5].Size, ShouldEqual, 50*1024*1024)
-					So(segs[5].Sid, ShouldEqual, "ffff00000005")
+					So(segs[5].Sid, ShouldEqual, "ffff00000006")
 					So(err, ShouldBeNil)
 				})
 				Convey("1250M is (50*25)", func() {
@@ -87,7 +87,7 @@ func Test_DefaultUnpacker(t *testing.T) {
 					segs, err = U.GenerateSegs("ffff", f)
 					So(len(segs), ShouldEqual, 25)
 					So(segs[24].Size, ShouldEqual, 50*1024*1024)
-					So(segs[24].Sid, ShouldEqual, "ffff00000024")
+					So(segs[24].Sid, ShouldEqual, "ffff00000025")
 					So(err, ShouldBeNil)
 				})
 				Convey("273G 25个分片无法均分, 24个正好", func() {

@@ -16,7 +16,7 @@ func fillTransferState(state *cydex.TransferState, uid string, size uint64, jd *
 	state.Uid = uid
 	state.State = jd.State
 	if size > 0 {
-		state.Percent = int(jd.FinishedSize * 100 / size)
+		state.Percent = int((jd.FinishedSize + jd.CurSegSize) * 100 / size)
 	} else {
 		state.Percent = 100
 	}
