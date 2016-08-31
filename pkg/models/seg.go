@@ -5,11 +5,11 @@ import (
 )
 
 type Seg struct {
-	Id       uint64    `xorm:"pk autoincr"`
-	Sid      string    `xorm:"varchar(32) unique not null"`
-	State    int       `xorm:"Int not null default(0)"`
-	Size     uint64    `xorm:"BigInt not null"`
-	Storage  string    `xorm:"varchar(255)"`
+	Id    uint64 `xorm:"pk autoincr"`
+	Sid   string `xorm:"varchar(32) unique not null"`
+	State int    `xorm:"Int not null default(0)"`
+	Size  uint64 `xorm:"BigInt not null"`
+	// Storage  string    `xorm:"varchar(255)"`
 	Fid      string    `xorm:"varchar(24)"`
 	CreateAt time.Time `xorm:"DateTime created"`
 	UpdateAt time.Time `xorm:"Datetime updated"`
@@ -60,16 +60,16 @@ func (self *Seg) SetState(state int) error {
 	return err
 }
 
-func (self *Seg) SetStorage(storage string) error {
-	s := &Seg{
-		Storage: storage,
-	}
-	_, err := DB().Id(self.Id).Cols("storage").Update(s)
-	if err == nil {
-		self.Storage = storage
-	}
-	return err
-}
+// func (self *Seg) SetStorage(storage string) error {
+// 	s := &Seg{
+// 		Storage: storage,
+// 	}
+// 	_, err := DB().Id(self.Id).Cols("storage").Update(s)
+// 	if err == nil {
+// 		self.Storage = storage
+// 	}
+// 	return err
+// }
 
 func (s *Seg) TableName() string {
 	return "package_seg"

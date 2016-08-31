@@ -5,22 +5,22 @@ import (
 )
 
 type File struct {
-	Id         uint64 `xorm:"pk autoincr"`
-	Fid        string `xorm:"varchar(24) notnull unique"`
-	Pid        string `xorm:"varchar(22)"`
-	Name       string `xorm:"varchar(255) notnull"`
-	Path       string `xorm:"TEXT notnull"`
-	Type       int    `xorm:"Int notnull default(1)"`
-	Size       uint64 `xorm:"BigInt notnull"`
-	Mode       int    `xorm:'Int default(0)'`
-	EigenValue string `xorm:"varchar(255)"`
-	PathAbs    string `xorm:"TEXT"`
-	NumSegs    int    `xorm:"not null"`
-	// ServerPath string    `xorm:"varchar(30)"`
-	CreateAt  time.Time `xorm:"DateTime created"`
-	UpdatedAt time.Time `xorm:"Datetime updated"`
-	Pkg       *Pkg      `xorm:"-"`
-	Segs      []*Seg    `xorm:"-"`
+	Id         uint64    `xorm:"pk autoincr"`
+	Fid        string    `xorm:"varchar(24) notnull unique"`
+	Pid        string    `xorm:"varchar(22)"`
+	Name       string    `xorm:"varchar(255) notnull"`
+	Path       string    `xorm:"TEXT notnull"`
+	Type       int       `xorm:"Int notnull default(1)"`
+	Size       uint64    `xorm:"BigInt notnull"`
+	Mode       int       `xorm:'Int default(0)'`
+	EigenValue string    `xorm:"varchar(255)"`
+	PathAbs    string    `xorm:"TEXT"`
+	NumSegs    int       `xorm:"not null"`
+	Storage    string    `xorm:"varchar(255)"`
+	CreateAt   time.Time `xorm:"DateTime created"`
+	UpdatedAt  time.Time `xorm:"Datetime updated"`
+	Pkg        *Pkg      `xorm:"-"`
+	Segs       []*Seg    `xorm:"-"`
 }
 
 // 创建文件
@@ -80,10 +80,8 @@ func (self *File) GetSegs() (err error) {
 	return
 }
 
-// func (self *File) QueryUploads() ([]*UploadDetail, error) {
-// 	return GetUploadDetailsByFid(self.Fid)
-// }
-//
-// func (self *File) QueryDownloads() ([]*DownloadDetail, error) {
-// 	return GetDownloadDetailsByFid(self.Fid)
-// }
+func (self *File) SetStorage(storage string) error {
+	self.Storage = storage
+	_, err := DB().Id(self.Id).Cols("storage").Update(self)
+	return err
+}

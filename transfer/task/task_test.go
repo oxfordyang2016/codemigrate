@@ -11,7 +11,7 @@ import (
 )
 
 func init() {
-	cache.Init("redis://127.0.0.1:6379", 3, 240)
+	cache.Init("redis://:MyCydex@127.0.0.1:6379", 3, 240)
 }
 
 type FakeTaskObserver struct {

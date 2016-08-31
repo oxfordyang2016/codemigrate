@@ -86,16 +86,10 @@ func buildTaskDownloadReq(uid, pid, fid string, sids []string) *task.DownloadReq
 		SidList: sids,
 	}
 
-	var sid_storage []string
-	for _, sid := range sids {
-		seg, _ := pkg_model.GetSeg(sid)
-		storage := ""
-		if seg != nil {
-			storage = seg.Storage
-		}
-		sid_storage = append(sid_storage, storage)
+	file_m, _ := pkg_model.GetFile(fid)
+	if file_m != nil {
+		task_req.DownloadTaskReq.FileStorage = file_m.Storage
 	}
-	task_req.DownloadTaskReq.SidStorage = sid_storage
 
 	return task_req
 }
@@ -225,19 +219,15 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 	}
 
 	task_rsp := trans_rsp.Rsp.UploadTask
-	if len(task_rsp.SidStorage) != len(task_rsp.SidList) {
-		clog.Error("seg storage len is not match")
-		rsp.Error = cydex.ErrInnerServer
-		return
-	}
+	// update storage
+	file_m.SetStorage(task_rsp.FileStorage)
 
 	rsp.Host = getHost(node.Host)
 	rsp.Port = task_rsp.Port
 	rsp.RecomendBitrate = task_rsp.RecomendBitrate
-	for i, sid := range task_rsp.SidList {
+	for _, sid := range task_rsp.SidList {
 		seg_m, _ := pkg_model.GetSeg(sid)
 		if seg_m != nil {
-			seg_m.SetStorage(task_rsp.SidStorage[i])
 			seg := new(cydex.Seg)
 			seg.Sid = seg_m.Sid
 			seg.SetSize(seg_m.Size)

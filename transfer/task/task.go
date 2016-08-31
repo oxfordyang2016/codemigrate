@@ -261,6 +261,7 @@ func (self *TaskManager) GetTask(taskid string) *Task {
 func (self *TaskManager) DelTask(taskid string) {
 	t, err := LoadTaskFromCache(taskid)
 	if err != nil {
+		// do nothing
 	}
 
 	DelTaskCache(taskid)
@@ -307,7 +308,6 @@ func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (
 	}
 
 	t := NewTask(req.JobId, msg)
-	// t.UploadReq = req
 	t.Nid = node.Nid
 	TaskMgr.AddTask(t)
 

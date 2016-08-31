@@ -894,27 +894,18 @@ func freePkgSpace(job *pkg_model.Job) {
 			if file.Size == 0 {
 				return
 			}
-			file.GetSegs()
-			var sids []string
-			for _, seg := range file.Segs {
-				sids = append(sids, seg.Sid)
-			}
-			if sids == nil {
-				return
-			}
-			task_req := buildTaskDownloadReq(job.Uid, pid, file.Fid, sids)
+			task_req := buildTaskDownloadReq(job.Uid, pid, file.Fid, nil)
 			clog.Tracef("%+v", task_req)
 			node, err := task.TaskMgr.Scheduler().DispatchDownload(task_req)
 			if node != nil {
 				// 发送协议
 				msg := transfer.NewReqMessage("", "removefile", "", 0)
 				msg.Req.RemoveFile = &transfer.RemoveFileReq{
-					RemoveId:   "",
-					Uid:        job.Uid,
-					Pid:        pid,
-					Fid:        file.Fid,
-					SidList:    sids,
-					SidStorage: task_req.DownloadTaskReq.SidStorage,
+					RemoveId:    "",
+					Uid:         job.Uid,
+					Pid:         pid,
+					Fid:         file.Fid,
+					FileStorage: task_req.DownloadTaskReq.FileStorage,
 				}
 				clog.Tracef("%+v", msg.Req.RemoveFile)
 				if _, err = node.SendRequestSync(msg, timeout); err != nil {

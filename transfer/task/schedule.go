@@ -70,18 +70,15 @@ func (self *DefaultScheduler) DispatchUpload(req *UploadReq) (n *trans.Node, err
 
 func (self *DefaultScheduler) DispatchDownload(req *DownloadReq) (n *trans.Node, err error) {
 	clog.Trace("dispatch download")
-	// TODO: 客户端一次请求一个file的所有seg,上传也是, 所以这些seg的分段存在一个Node上
-	// 这里判断storage是否是一个nodeid上?
 
-	// 取第一个即可
-	sid_storage := req.SidStorage[0]
-	if sid_storage == "" {
-		err = fmt.Errorf("segs are not uploaded yet!")
+	storage := req.FileStorage
+	if storage == "" {
+		err = fmt.Errorf("There is no storage, file are not uploaded yet!")
 		return
 	}
-	clog.Trace(sid_storage)
+	clog.Trace(storage)
 	var url *URL.URL
-	if url, err = URL.Parse(sid_storage); err != nil {
+	if url, err = URL.Parse(storage); err != nil {
 		return nil, err
 	}
 	scheme := strings.ToLower(url.Scheme)
@@ -93,7 +90,7 @@ func (self *DefaultScheduler) DispatchDownload(req *DownloadReq) (n *trans.Node,
 	case "nas":
 		n, err = self.d_nas.DispatchDownload(req)
 	default:
-		err = fmt.Errorf("Unsupport storage url %s", sid_storage)
+		err = fmt.Errorf("Unsupport storage url %s", storage)
 	}
 	return
 }

@@ -241,7 +241,7 @@ func Test_Node(t *testing.T) {
 					m.Rsp.Code = cydex.OK
 					m.Rsp.UploadTask = &transfer.UploadTaskRsp{
 						SidList:         []string{"s1", "s2", "s3"},
-						SidStorage:      []string{"s1_s", "s2_s", "s3_s"},
+						FileStorage:     "fid_s",
 						Port:            1234,
 						RecomendBitrate: 123,
 					}
