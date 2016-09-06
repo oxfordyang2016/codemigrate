@@ -12,6 +12,10 @@ import (
 )
 
 type WSServerConfig struct {
+	// ssl信息
+	UseSSL   bool
+	CertFile string
+	KeyFile  string
 	// 连接上来后多长时间没有响应就关闭连接
 	ConnDeadline time.Duration
 	// 心跳周期 in second
@@ -57,7 +61,11 @@ func (self *WSServer) SetVersion(v string) {
 func (s *WSServer) Serve() {
 	http.Handle(s.url, websocket.Handler(s.connHandle))
 	addr := fmt.Sprintf(":%d", s.port)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	if s.config.UseSSL {
+		log.Fatal(http.ListenAndServeTLS(addr, s.config.CertFile, s.config.KeyFile, nil))
+	} else {
+		log.Fatal(http.ListenAndServe(addr, nil))
+	}
 }
 
 func (s *WSServer) connHandle(ws *websocket.Conn) {

@@ -95,15 +95,21 @@ func setupWebsocketService(cfg *ini.File) (err error) {
 		err = fmt.Errorf("Invalid websocket url:%s or port:%d", url, port)
 		return
 	}
+	ssl := sec.Key("ssl").MustBool(false)
+	cert_file := sec.Key("cert_file").MustString("")
+	key_file := sec.Key("key_file").MustString("")
 	idle_timeout := sec.Key("idle_timeout").MustUint(10)
 	keepalive_interval := sec.Key("keepalive_interval").MustUint(180)
 	notify_interval := sec.Key("notify_interval").MustUint(3)
 	ws_cfg := &trans.WSServerConfig{
+		UseSSL:                 ssl,
+		CertFile:               cert_file,
+		KeyFile:                key_file,
 		ConnDeadline:           time.Duration(idle_timeout) * time.Second,
 		KeepaliveInterval:      keepalive_interval,
 		TransferNotifyInterval: notify_interval,
 	}
-	clog.Infof("[setup websocket] listen port:%d, with config [%d, %d, %d]", port, idle_timeout, keepalive_interval, notify_interval)
+	clog.Infof("[setup websocket] listen port:%d, ssl:%t with config [%d, %d, %d]", port, ssl, idle_timeout, keepalive_interval, notify_interval)
 	ws_server = trans.NewWSServer(url, port, ws_cfg)
 	return
 }
