@@ -105,7 +105,15 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 		job := pkg.JobMgr.GetJob(jobid)
 		jd := pkg.JobMgr.GetJobDetail(jobid, req.Fid)
 		if jd != nil {
-			jd.SetState(cydex.TRANSFER_STATE_DONE)
+			jd.GetFile()
+			if jd.File != nil {
+				jd.FinishedSize = jd.File.Size
+				jd.NumFinishedSegs = jd.File.NumSegs
+			}
+			jd.StartTime = time.Now()
+			jd.FinishTime = jd.StartTime
+			jd.State = cydex.TRANSFER_STATE_DONE
+			jd.Save()
 		}
 		if job != nil {
 			if job.IsCached {

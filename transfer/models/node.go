@@ -5,7 +5,7 @@ import (
 )
 
 type Node struct {
-	Id             uint64    `xorm:"pk autoincr"`
+	Id             int64     `xorm:"pk autoincr"`
 	MachineCode    string    `xorm:"varchar(255) not null unique"`
 	Nid            string    `xorm:"varchar(64) not null unique"`
 	Name           string    `xorm:"varchar(255)"`

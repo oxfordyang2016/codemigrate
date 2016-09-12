@@ -6,7 +6,7 @@ import (
 )
 
 type Pkg struct {
-	Id             uint64 `xorm:"pk autoincr"`
+	Id             int64  `xorm:"pk autoincr"`
 	Pid            string `xorm:"varchar(22) unique not null"`
 	Title          string `xorm:"varchar(30) not null"`
 	Notes          string `xorm:"varchar(120)"`

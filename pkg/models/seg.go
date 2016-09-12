@@ -5,7 +5,7 @@ import (
 )
 
 type Seg struct {
-	Id    uint64 `xorm:"pk autoincr"`
+	Id    int64  `xorm:"pk autoincr"`
 	Sid   string `xorm:"varchar(32) unique not null"`
 	State int    `xorm:"Int not null default(0)"`
 	Size  uint64 `xorm:"BigInt not null"`

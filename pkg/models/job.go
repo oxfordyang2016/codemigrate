@@ -13,7 +13,7 @@ const (
 )
 
 type Job struct {
-	Id       uint64    `xorm:"pk autoincr"`
+	Id       int64     `xorm:"pk autoincr"`
 	JobId    string    `xorm:"unique not null"`
 	Type     int       `xorm:"int"` // cydex.UPLOAD or cydex.DOWNLOAD
 	Pid      string    `xorm:"varchar(22) not null"`
@@ -132,11 +132,11 @@ func DeleteJob(jobid string) (err error) {
 		return err
 	}
 	for _, jd := range jds {
-		if _, err = session.Delete(jd); err != nil {
+		if _, err = session.Id(jd.Id).Delete(jd); err != nil {
 			return err
 		}
 	}
-	session.Delete(j)
+	session.Id(j.Id).Delete(j)
 	if err = session.Commit(); err != nil {
 		return err
 	}
@@ -215,7 +215,7 @@ func (self *Job) String() string {
 }
 
 type JobDetail struct {
-	Id              uint64    `xorm:"pk autoincr"`
+	Id              int64     `xorm:"pk autoincr"`
 	JobId           string    `xorm:"not null"`
 	Job             *Job      `xorm:"-"`
 	Fid             string    `xorm:"varchar(24) not null"`

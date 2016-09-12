@@ -129,18 +129,18 @@ func (self *NodeManager) WalkNodes(walk_fun func(n *Node)) {
 }
 
 type NodeInfo struct {
-	Version           string
-	NetAddr           string
-	OS                string
-	NetSpeed          uint32
-	Storage           []*transfer.StorageInfo
-	TotalStorage      uint64
-	FreeStorage       uint64
-	CpuUsage          uint32
-	TotalMem          uint64
-	FreeMem           uint64
-	UploadBandwidth   uint64
-	DownloadBandwidth uint64
+	Version      string
+	NetAddr      string
+	OS           string
+	NetSpeed     uint32
+	Storage      []*transfer.StorageInfo
+	TotalStorage uint64
+	FreeStorage  uint64
+	CpuUsage     uint32
+	TotalMem     uint64
+	FreeMem      uint64
+	RxBandwidth  uint64
+	TxBandwidth  uint64
 }
 
 type TimeMessage struct {
@@ -320,8 +320,8 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 	self.Info.CpuUsage = msg.Req.Login.CpuUsage
 	self.Info.TotalMem = msg.Req.Login.TotalMem
 	self.Info.FreeMem = msg.Req.Login.FreeMem
-	self.Info.UploadBandwidth = msg.Req.Login.RxBandwidth
-	self.Info.DownloadBandwidth = msg.Req.Login.TxBandwidth
+	self.Info.RxBandwidth = msg.Req.Login.RxBandwidth
+	self.Info.TxBandwidth = msg.Req.Login.TxBandwidth
 	self.login_at = time.Now()
 	self.Update(true)
 
@@ -355,7 +355,22 @@ func (self *Node) handleKeepAlive(msg, rsp *transfer.Message) (err error) {
 		err = fmt.Errorf("%s verify failed, token:%s, remote:[nid:%s, token:%s]", self, self.Token, msg.From, msg.Token)
 		rsp.Rsp.Code = cydex.ErrInvalidLicense
 		rsp.Rsp.Reason = err.Error()
+		return
 	}
+
+	if msg.Req == nil || msg.Req.Keepalive == nil {
+		err = fmt.Errorf("Invalid keepalive msg")
+		rsp.Rsp.Code = cydex.ErrInvalidParam
+		return
+	}
+
+	self.Info.TotalStorage = msg.Req.Keepalive.TotalStorage
+	self.Info.FreeStorage = msg.Req.Keepalive.FreeStorage
+	self.Info.CpuUsage = msg.Req.Keepalive.CpuUsage
+	self.Info.TotalMem = msg.Req.Keepalive.TotalMem
+	self.Info.FreeMem = msg.Req.Keepalive.FreeMem
+	self.Info.RxBandwidth = msg.Req.Keepalive.RxBandwidth
+	self.Info.TxBandwidth = msg.Req.Keepalive.TxBandwidth
 
 	return
 }

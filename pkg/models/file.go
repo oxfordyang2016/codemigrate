@@ -5,7 +5,7 @@ import (
 )
 
 type File struct {
-	Id         uint64    `xorm:"pk autoincr"`
+	Id         int64     `xorm:"pk autoincr"`
 	Fid        string    `xorm:"varchar(24) notnull unique"`
 	Pid        string    `xorm:"varchar(22)"`
 	Name       string    `xorm:"varchar(255) notnull"`

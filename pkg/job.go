@@ -19,6 +19,8 @@ const (
 	// JD数据同步进数据库的间隔
 	// DEFAULT_CACHE_SYNC_TIMEOUT = 30 * time.Second
 	DEFAULT_CACHE_SYNC_TIMEOUT = 0
+	// 延时删除job的时间
+	DELAY_DEL_JOB_TIME = 20 * time.Second
 )
 
 var (
@@ -640,11 +642,16 @@ func (self *JobManager) ProcessJob(jobid string) {
 	}
 	if self.isJobFinished(job) {
 		clog.Infof("%s is finished", jobid)
-		// j.SetState(cydex.TRANSFER_STATE_DONE)
-		self.lock.Lock()
-		delete(self.jobs, jobid)
-		self.DelTrack(job.Uid, job.Pid, job.Type, false)
-		self.lock.Unlock()
+
+		// 延时删除track和cache
+		go func() {
+			job := job
+			<-time.After(DELAY_DEL_JOB_TIME)
+			self.lock.Lock()
+			delete(self.jobs, jobid)
+			self.DelTrack(job.Uid, job.Pid, job.Type, false)
+			self.lock.Unlock()
+		}()
 	}
 }
 
