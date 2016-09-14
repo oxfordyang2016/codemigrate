@@ -10,7 +10,9 @@ import (
 	clog "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
 	"github.com/pborman/uuid"
+	URL "net/url"
 	"sync"
+	// "sync/atomic"
 	"time"
 )
 
@@ -19,7 +21,8 @@ const (
 )
 
 var (
-	TaskMgr *TaskManager
+	TaskMgr       *TaskManager
+	task_id_start = uint64(10000)
 )
 
 func init() {
@@ -27,6 +30,8 @@ func init() {
 }
 
 func GenerateTaskId() string {
+	// v := atomic.AddUint64(&task_id_start, 1)
+	// return fmt.Sprintf("%d", v)
 	return uuid.New()
 }
 
@@ -59,9 +64,9 @@ type DownloadReq struct {
 	*transfer.DownloadTaskReq
 	// jzh: DownloadTaskReq里是owner_uid, TaskUid指请求的用户uid
 	// TaskUid         string
-	FinishedSidList []string //已经下完的片段
-	meta            interface{}
-	JobId           string
+	// meta  interface{}
+	url   *URL.URL
+	JobId string
 }
 
 // func NewDownloadReq(r *transfer.DownloadTaskReq, pid string, finished_sid_list []string) (req *DownloadReq, err error) {
@@ -79,15 +84,9 @@ type DownloadReq struct {
 type Task struct {
 	TaskId string `redis:"task_id"` // 任务ID
 	JobId  string `redis:"job_id"`  // 包裹JobId
-	// Uid         string
-	Pid  string `redis:"pid"`
-	Fid  string `redis:"fid"`
-	Type int    `redis:"type"` // 类型, U or D
-	// UploadReq   *UploadReq
-	// DownloadReq *DownloadReq
-	// SegsState   map[string]*transfer.TaskState
-	// CreateAt time.Time
-	// UpdateAt time.Time
+	Pid    string `redis:"pid"`
+	Fid    string `redis:"fid"`
+	Type   int    `redis:"type"` // 类型, U or D
 	NumSeg int    `redis:"num_seg"`
 	Nid    string `redis:"nid"`
 }

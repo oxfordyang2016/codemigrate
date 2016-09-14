@@ -82,10 +82,10 @@ func (self *DefaultScheduler) DispatchDownload(req *DownloadReq) (n *trans.Node,
 		return nil, err
 	}
 	scheme := strings.ToLower(url.Scheme)
+	req.url = url
 	clog.Trace(scheme)
 	switch scheme {
 	case "file":
-		req.meta = url
 		n, err = self.d_file.DispatchDownload(req)
 	case "nas":
 		n, err = self.d_nas.DispatchDownload(req)

@@ -38,7 +38,11 @@ func (self *BaseController) Finish() {
 	if ShowRspBody && self.Data["json"] != nil {
 		b, err := json.Marshal(self.Data["json"])
 		if err == nil {
-			clog.Trace("[http rsp]: ", string(b))
+			show_b := b
+			if len(b) > 256 {
+				show_b = b[:256]
+			}
+			clog.Tracef("[http rsp]: %s ...", string(show_b))
 		}
 	}
 }
