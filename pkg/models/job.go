@@ -202,13 +202,20 @@ func (self *Job) IsFinished() bool {
 	return n == 0
 }
 
-// 复位, 重新开始
-// func (self *Job) Reset() (err error) {
-// 	self.State = cydex.TRANSFER_STATE_IDLE
-// 	self.FinishAt = time.Time{}
-// 	_, err = DB().Where("job_id=?", self.JobId).Cols("state", "finish_at").Update(self)
-// 	return
-// }
+// 获取传输了多少数据
+func (self *Job) GetTransferedSize() (uint64, error) {
+	jds, err := GetJobDetails(self.JobId)
+	if err != nil {
+		return 0, err
+	}
+	total := uint64(0)
+	for _, jd := range jds {
+		if jd.State == cydex.TRANSFER_STATE_DONE {
+			total += jd.FinishedSize
+		}
+	}
+	return total, nil
+}
 
 func (self *Job) String() string {
 	return fmt.Sprintf("<Job(%s)", self.JobId)

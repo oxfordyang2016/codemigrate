@@ -193,11 +193,19 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 		rsp.Error = cydex.ErrInnerServer
 		return
 	}
+	jobid := pkg.HashJob(uid, pid, cydex.UPLOAD)
+	job_m := pkg.JobMgr.GetJob(jobid)
+	if job_m == nil {
+		clog.Error(err)
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	transferd_size, _ := job_m.GetTransferedSize()
 
 	task_req := new(task.UploadReq)
-	task_req.JobId = pkg.HashJob(uid, pid, cydex.UPLOAD)
+	task_req.JobId = jobid
 	task_req.FileSize = file_m.Size
-	task_req.PkgSize = pkg_m.Size
+	task_req.LeftPkgSize = pkg_m.Size - transferd_size
 	task_req.UploadTaskReq = &transfer.UploadTaskReq{
 		TaskId:  task.GenerateTaskId(),
 		Uid:     uid,
@@ -212,7 +220,7 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 		}
 	}
 
-	clog.Tracef("pid:%s, pkg_size:%d, file_size:%d,segs size:%d", task_req.Pid, task_req.PkgSize, task_req.FileSize, task_req.UploadTaskReq.Size)
+	clog.Tracef("upload req: %+v", task_req)
 
 	trans_rsp, node, err := task.TaskMgr.DispatchUpload(task_req, DISPATCH_TIMEOUT)
 	if err != nil || node == nil || trans_rsp == nil {

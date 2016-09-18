@@ -121,8 +121,8 @@ func Test_RestrictUploadScheduler(t *testing.T) {
 			S.AddTask(t1)
 
 			r1 := &UploadReq{
-				PkgSize:  1234,
-				FileSize: 127,
+				LeftPkgSize: 1234,
+				FileSize:    127,
 				UploadTaskReq: &transfer.UploadTaskReq{
 					TaskId: "t1",
 					Uid:    "1234567890ab",
@@ -136,8 +136,8 @@ func Test_RestrictUploadScheduler(t *testing.T) {
 			So(r1.restrict_mode, ShouldEqual, TASK_RESTRICT_BY_FID)
 
 			r2 := &UploadReq{
-				PkgSize:  1234,
-				FileSize: 129,
+				LeftPkgSize: 1234,
+				FileSize:    129,
 				UploadTaskReq: &transfer.UploadTaskReq{
 					TaskId: "t2",
 					Uid:    "1234567890ab",
@@ -169,8 +169,8 @@ func Test_RestrictUploadScheduler(t *testing.T) {
 			S.AddTask(t1)
 
 			r1 := &UploadReq{
-				PkgSize:  999,
-				FileSize: 127,
+				LeftPkgSize: 999,
+				FileSize:    127,
 				UploadTaskReq: &transfer.UploadTaskReq{
 					TaskId: "t1",
 					Uid:    "1234567890ab",
@@ -185,8 +185,8 @@ func Test_RestrictUploadScheduler(t *testing.T) {
 			So(r1.restrict_mode, ShouldEqual, TASK_RESTRICT_BY_PID)
 
 			r2 := &UploadReq{
-				PkgSize:  1001,
-				FileSize: 129,
+				LeftPkgSize: 1001,
+				FileSize:    129,
 				UploadTaskReq: &transfer.UploadTaskReq{
 					TaskId: "t2",
 					Uid:    "1234567890ab",

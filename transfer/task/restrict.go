@@ -49,7 +49,7 @@ func GetReqSize(req *UploadReq) uint64 {
 	case TASK_RESTRICT_BY_FID:
 		return req.FileSize
 	case TASK_RESTRICT_BY_PID:
-		return req.PkgSize
+		return req.LeftPkgSize
 	default:
 		return 0
 	}

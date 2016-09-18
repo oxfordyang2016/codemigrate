@@ -111,6 +111,7 @@ func NewTrack() *Track {
 type JobManager struct {
 	lock               sync.Mutex
 	cache_sync_timeout time.Duration //cache同步超时时间
+	del_job_delay      time.Duration // 延迟删除job时间
 
 	jobs          map[string]*models.Job // jobid->job, cache
 	track_users   map[string]*Track      // uid->track, track里记录上传下载的pid
@@ -125,6 +126,7 @@ func NewJobManager() *JobManager {
 	jm.track_users = make(map[string]*Track)
 	jm.track_pkgs = make(map[string]*Track)
 	jm.track_deletes = make(map[string]*Track)
+	jm.del_job_delay = DELAY_DEL_JOB_TIME
 	return jm
 }
 
@@ -644,14 +646,21 @@ func (self *JobManager) ProcessJob(jobid string) {
 		clog.Infof("%s is finished", jobid)
 
 		// 延时删除track和cache
-		go func() {
-			job := job
-			<-time.After(DELAY_DEL_JOB_TIME)
+		if self.del_job_delay > 0 {
+			go func() {
+				job := job
+				time.Sleep(self.del_job_delay)
+				self.lock.Lock()
+				delete(self.jobs, jobid)
+				self.DelTrack(job.Uid, job.Pid, job.Type, false)
+				self.lock.Unlock()
+			}()
+		} else {
 			self.lock.Lock()
 			delete(self.jobs, jobid)
 			self.DelTrack(job.Uid, job.Pid, job.Type, false)
 			self.lock.Unlock()
-		}()
+		}
 	}
 }
 

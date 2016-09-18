@@ -20,6 +20,7 @@ const (
 func init() {
 	initDB()
 	JobMgr.SetCacheSyncTimeout(0)
+	JobMgr.del_job_delay = 0
 }
 
 func initDB() {

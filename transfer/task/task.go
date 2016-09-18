@@ -44,7 +44,7 @@ type TaskObserver interface {
 type UploadReq struct {
 	*transfer.UploadTaskReq
 	JobId         string
-	PkgSize       uint64
+	LeftPkgSize   uint64 //issue-29 pkg未传输size
 	FileSize      uint64
 	restrict_mode int
 }
