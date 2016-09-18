@@ -160,6 +160,9 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 				self.AddTrack(u_job.Uid, u_job.Pid, u_job.Type, false)
 			}
 		}
+
+		// 删除原有的cache
+		delete(self.jobs, jobid)
 		return nil
 	}
 
