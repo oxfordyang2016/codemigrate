@@ -22,8 +22,9 @@ const (
 )
 
 var (
-	ws_server *trans.WSServer
-	http_addr string
+	ws_server      *trans.WSServer
+	http_addr      string
+	beego_loglevel int
 )
 
 func initLog() {
@@ -207,6 +208,8 @@ func setupHttp(cfg *ini.File) (err error) {
 		clog.Warnf("Enable fake api for standalone running")
 		EnableFakeApi()
 	}
+
+	beego_loglevel = sec.Key("beego_loglevel").MustInt(beego.LevelInformational)
 	return
 }
 
@@ -242,6 +245,8 @@ func run() {
 
 	go task.TaskMgr.TaskStateRoutine()
 	go ws_server.Serve()
+
+	beego.SetLevel(beego_loglevel)
 	go beego.Run(http_addr)
 
 	clog.Info("Run...")
