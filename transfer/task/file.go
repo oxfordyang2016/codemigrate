@@ -23,7 +23,6 @@ func (self *FileDownloadScheduler) DispatchDownload(req *DownloadReq) (n *trans.
 	}
 	clog.Tracef("%#v", url)
 	nid := url.Host
-	clog.Info("dispatch download: node id is ", nid)
 	n = trans.NodeMgr.GetByNid(nid)
 	return
 }

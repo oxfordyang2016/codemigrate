@@ -2,6 +2,7 @@ package task
 
 import (
 	trans "./.."
+	"cydex/transfer"
 	"fmt"
 	clog "github.com/cihub/seelog"
 	URL "net/url"
@@ -60,6 +61,21 @@ func (self *DefaultScheduler) DispatchUpload(req *UploadReq) (n *trans.Node, err
 	if n != nil {
 		return
 	}
+	// issue-31, 有文件存储路径,说明文件分片已经有上传过了
+	if req.FileStorage != "" {
+		// 已有分片被上传过了,分片上传约束调度器没找到对应的node,要找到原有的node.
+		clog.Warnf("segs of file(%s) were uploaded", req.Fid)
+		req2 := new(DownloadReq)
+		req2.DownloadTaskReq = &transfer.DownloadTaskReq{
+			FileStorage: req.FileStorage,
+		}
+		n, err = self.dispatchDownload(req2)
+
+		if n != nil {
+			return
+		}
+		return nil, fmt.Errorf("All segments of one file should be dispatched to the same node!!")
+	}
 
 	n, err = self.u_proxy.DispatchUpload(req)
 	if err != nil {
@@ -68,9 +84,7 @@ func (self *DefaultScheduler) DispatchUpload(req *UploadReq) (n *trans.Node, err
 	return
 }
 
-func (self *DefaultScheduler) DispatchDownload(req *DownloadReq) (n *trans.Node, err error) {
-	clog.Trace("dispatch download")
-
+func (self *DefaultScheduler) dispatchDownload(req *DownloadReq) (n *trans.Node, err error) {
 	storage := req.FileStorage
 	if storage == "" {
 		err = fmt.Errorf("There is no storage, file are not uploaded yet!")
@@ -83,6 +97,8 @@ func (self *DefaultScheduler) DispatchDownload(req *DownloadReq) (n *trans.Node,
 	}
 	scheme := strings.ToLower(url.Scheme)
 	req.url = url
+	clog.Tracef("dispatch url: %+v", url)
+
 	clog.Trace(scheme)
 	switch scheme {
 	case "file":
@@ -93,4 +109,9 @@ func (self *DefaultScheduler) DispatchDownload(req *DownloadReq) (n *trans.Node,
 		err = fmt.Errorf("Unsupport storage url %s", storage)
 	}
 	return
+}
+
+func (self *DefaultScheduler) DispatchDownload(req *DownloadReq) (n *trans.Node, err error) {
+	clog.Trace("dispatch download")
+	return self.dispatchDownload(req)
 }

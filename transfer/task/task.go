@@ -46,6 +46,7 @@ type UploadReq struct {
 	JobId         string
 	LeftPkgSize   uint64 //issue-29 pkg未传输size
 	FileSize      uint64
+	FileStorage   string //issue-31
 	restrict_mode int
 }
 

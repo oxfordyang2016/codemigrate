@@ -219,6 +219,7 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 			task_req.UploadTaskReq.Size += seg.Size
 		}
 	}
+	task_req.FileStorage = file_m.Storage
 
 	clog.Tracef("upload req: %+v", task_req)
 
