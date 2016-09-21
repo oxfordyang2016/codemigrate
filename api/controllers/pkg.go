@@ -461,14 +461,25 @@ func (self *PkgsController) getLitePkgs() {
 	}
 
 	for _, p := range pkgs {
-		rsp.Pkgs = append(rsp.Pkgs, &cydex.PkgLite{
+		pkg_lite := &cydex.PkgLite{
 			Pid:      p.Pid,
 			Title:    p.Title,
 			Date:     MarshalUTCTime(p.CreateAt),
 			Notes:    p.Notes,
 			NumFiles: int(p.NumFiles),
 			Size:     int64(p.Size),
-		})
+			Sender:   make([]*cydex.UserLite, 0),
+			Receiver: make([]*cydex.UserLite, 0),
+		}
+		uj, _ := pkg_model.GetJobsByPid(p.Pid, cydex.UPLOAD, nil)
+		for _, j := range uj {
+			pkg_lite.Sender = append(pkg_lite.Sender, &cydex.UserLite{Uid: j.Uid})
+		}
+		dj, _ := pkg_model.GetJobsByPid(p.Pid, cydex.DOWNLOAD, nil)
+		for _, j := range dj {
+			pkg_lite.Receiver = append(pkg_lite.Receiver, &cydex.UserLite{Uid: j.Uid})
+		}
+		rsp.Pkgs = append(rsp.Pkgs, pkg_lite)
 	}
 }
 
@@ -497,6 +508,7 @@ func (self *PkgsController) Post() {
 	// 获取请求
 	if err := self.FetchJsonBody(req); err != nil {
 		rsp.Error = cydex.ErrInvalidParam
+		return
 	}
 	for _, f := range req.Files {
 		f.Size, _ = strconv.ParseUint(f.SizeStr, 10, 64)
@@ -1009,7 +1021,19 @@ func (self *FileController) Get() {
 			file.DownloadState = append(file.DownloadState, state)
 		}
 	}
+
+	// fill default if nil
+	if file.Segs == nil {
+		file.Segs = make([]*cydex.Seg, 0)
+	}
+	if file.DownloadState == nil {
+		file.DownloadState = make([]*cydex.TransferState, 0)
+	}
+	if file.UploadState == nil {
+		file.UploadState = make([]*cydex.TransferState, 0)
+	}
 	rsp.File = file
+
 	return
 }
 

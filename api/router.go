@@ -8,12 +8,15 @@ import (
 )
 
 func setupRoute() {
-	// TODO 正则限制长度
 	beego.Router("/:uid/pkg", &c.PkgsController{})
 	beego.Router("/:uid/pkg/:pid", &c.PkgController{})
 	beego.Router("/:uid/pkg/:pid/:fid", &c.FileController{})
 	beego.Router("/:uid/transfer", &c.TransferController{})
 	beego.Router("/:uid/log", &c.LogController{})
+
+	beego.Router("/api/v1/nodes", &c.NodesController{})
+	beego.Router("/api/v1/nodes/:id", &c.NodeController{})
+	beego.Router("/api/v1/nodes/:id/status", &c.NodeStatusController{})
 }
 
 func setupFilter() {

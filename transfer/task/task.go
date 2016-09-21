@@ -233,6 +233,11 @@ func (self *TaskManager) AddTask(t *Task) {
 		clog.Error("save task %s cache failed", t)
 	}
 
+	node := trans.NodeMgr.GetByNid(t.Nid)
+	if node != nil {
+		node.AddTaskCnt(t.Type, 1)
+	}
+
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
@@ -265,15 +270,22 @@ func (self *TaskManager) DelTask(taskid string) {
 	}
 
 	DelTaskCache(taskid)
+	clog.Infof("Del task(%s) %+v", taskid, t)
+
+	if t == nil {
+		return
+	}
+
+	node := trans.NodeMgr.GetByNid(t.Nid)
+	if node != nil {
+		node.AddTaskCnt(t.Type, -1)
+	}
 
 	self.lock.Lock()
 	defer self.lock.Unlock()
-	if t != nil {
-		for _, o := range self.observers {
-			o.DelTask(t)
-		}
+	for _, o := range self.observers {
+		o.DelTask(t)
 	}
-	clog.Infof("Del task(%s) %+v", taskid, t)
 }
 
 func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (rsp *transfer.Message, node *trans.Node, err error) {

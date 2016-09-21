@@ -129,18 +129,21 @@ func (self *NodeManager) WalkNodes(walk_fun func(n *Node)) {
 }
 
 type NodeInfo struct {
-	Version      string
-	NetAddr      string
-	OS           string
-	NetSpeed     uint32
-	Storage      []*transfer.StorageInfo
-	TotalStorage uint64
-	FreeStorage  uint64
-	CpuUsage     uint32
-	TotalMem     uint64
-	FreeMem      uint64
-	RxBandwidth  uint64
-	TxBandwidth  uint64
+	Version         string
+	F2tpVersion     string
+	NetAddr         string
+	OS              string
+	NetSpeed        uint32
+	Storage         []*transfer.StorageInfo
+	TotalStorage    uint64
+	FreeStorage     uint64
+	CpuUsage        uint32
+	TotalMem        uint64
+	FreeMem         uint64
+	RxBandwidth     uint64
+	TxBandwidth     uint64
+	UploadTaskCnt   int
+	DownloadTaskCnt int
 }
 
 type TimeMessage struct {
@@ -308,9 +311,10 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 	}
 
 	self.Nid = nid
-	self.ZoneId = self.model.Zid
+	self.ZoneId = self.model.ZoneId
 	self.Token = uuid.New()
 	self.Info.Version = msg.Req.Login.Version
+	self.Info.F2tpVersion = msg.Req.Login.F2tpVersion
 	self.Info.NetAddr = msg.Req.Login.NetAddr
 	self.Info.OS = msg.Req.Login.OS
 	self.Info.NetSpeed = msg.Req.Login.NetSpeed
@@ -324,6 +328,13 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 	self.Info.TxBandwidth = msg.Req.Login.TxBandwidth
 	self.login_at = time.Now()
 	self.Update(true)
+
+	if self.model.RxBandwidth != msg.Req.Login.RxBandwidth {
+		self.model.SetRxBandwidth(msg.Req.Login.RxBandwidth)
+	}
+	if self.model.TxBandwidth != msg.Req.Login.TxBandwidth {
+		self.model.SetTxBandwidth(msg.Req.Login.TxBandwidth)
+	}
 
 	NodeMgr.AddNode(self)
 
@@ -491,4 +502,24 @@ func (self *Node) OnlineDuration() time.Duration {
 		return time.Duration(0)
 	}
 	return time.Since(self.login_at)
+}
+
+func (self *Node) OnlineAt() time.Time {
+	return self.login_at
+}
+
+func (self *Node) AddTaskCnt(typ int, v int) {
+	var cnt *int
+	switch typ {
+	case cydex.UPLOAD:
+		cnt = &self.Info.UploadTaskCnt
+	case cydex.DOWNLOAD:
+		cnt = &self.Info.DownloadTaskCnt
+	default:
+		return
+	}
+	*cnt += v
+	if *cnt < 0 {
+		*cnt = 0
+	}
 }

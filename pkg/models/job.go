@@ -61,6 +61,7 @@ func GetJobs(typ int, p *cydex.Pagination) ([]*Job, error) {
 	if p != nil {
 		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
 	}
+	sess = sess.Desc("create_at")
 	if err = sess.Find(&jobs); err != nil {
 		return nil, err
 	}

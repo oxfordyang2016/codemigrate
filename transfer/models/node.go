@@ -1,20 +1,25 @@
 package models
 
 import (
+	"cydex"
 	"time"
 )
 
 type Node struct {
-	Id             int64     `xorm:"pk autoincr"`
-	MachineCode    string    `xorm:"varchar(255) not null unique"`
-	Nid            string    `xorm:"varchar(64) not null unique"`
-	Name           string    `xorm:"varchar(255)"`
-	Zid            string    `xomr:"varchar(255)"`
+	Id             int64  `xorm:"pk autoincr"`
+	MachineCode    string `xorm:"varchar(255) not null unique"`
+	Nid            string `xorm:"varchar(64) not null unique"`
+	Name           string `xorm:"varchar(255)"`
+	ZoneId         string `xorm:"varchar(255)"`
+	PublicAddr     string `xorm:"varchar(64)"`
+	RxBandwidth    uint64
+	TxBandwidth    uint64
 	RegisterTime   time.Time `xorm:"-"`
 	LastLoginTime  time.Time `xorm:"DateTime"`
 	LastLogoutTime time.Time `xorm:"DateTime"`
 	CreateAt       time.Time `xorm:"DateTime created"`
 	UpdateAt       time.Time `xorm:"DateTime updated"`
+	Zone           *Zone     `xorm:"-"`
 }
 
 func CreateNode(machine_code, nid string) (*Node, error) {
@@ -54,17 +59,54 @@ func GetNodeByMachineCode(mc string) (n *Node, err error) {
 	return n, nil
 }
 
-func (n *Node) Setup(zid string, name string, omitempty bool) error {
-	var err error
-	new_n := new(Node)
-	new_n.Zid = zid
-	new_n.Name = name
-	if !omitempty {
-		_, err = DB().Where("nid=?", n.Nid).Cols("zid", "name").Update(new_n)
-	} else {
-		_, err = DB().Where("nid=?", n.Nid).Update(new_n)
-	}
+func CountNodes() (int64, error) {
+	n, err := DB().Count(new(Node))
+	return n, err
+}
 
+func GetNodes(p *cydex.Pagination) ([]*Node, error) {
+	nodes := make([]*Node, 0)
+	var err error
+	sess := DB().NewSession()
+	if p != nil {
+		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
+	}
+	if err = sess.Find(&nodes); err != nil {
+		return nil, err
+	}
+	for _, n := range nodes {
+		n.RegisterTime = n.CreateAt
+	}
+	return nodes, nil
+}
+
+func (n *Node) SetName(name string) error {
+	n.Name = name
+	_, err := DB().Id(n.Id).Cols("name").Update(n)
+	return err
+}
+
+func (n *Node) SetZone(zone_id string) error {
+	n.ZoneId = zone_id
+	_, err := DB().Id(n.Id).Cols("zone_id").Update(n)
+	return err
+}
+
+func (n *Node) SetPublicAddr(v string) error {
+	n.PublicAddr = v
+	_, err := DB().Id(n.Id).Cols("public_addr").Update(n)
+	return err
+}
+
+func (n *Node) SetRxBandwidth(v uint64) error {
+	n.RxBandwidth = v
+	_, err := DB().Id(n.Id).Cols("rx_bandwidth").Update(n)
+	return err
+}
+
+func (n *Node) SetTxBandwidth(v uint64) error {
+	n.TxBandwidth = v
+	_, err := DB().Id(n.Id).Cols("tx_bandwidth").Update(n)
 	return err
 }
 
@@ -82,6 +124,14 @@ func (n *Node) UpdateLogoutTime(t time.Time) error {
 		return err
 	}
 	return nil
+}
+
+func (self *Node) GetZone() error {
+	var err error
+	if self.ZoneId != "" {
+		self.Zone, err = GetZone(self.ZoneId)
+	}
+	return err
 }
 
 func (self *Node) TableName() string {

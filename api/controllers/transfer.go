@@ -3,6 +3,8 @@ package controllers
 import (
 	"./../../pkg"
 	pkg_model "./../../pkg/models"
+	trans "./../../transfer"
+	trans_model "./../../transfer/models"
 	"./../../transfer/task"
 	"cydex"
 	"cydex/transfer"
@@ -153,7 +155,7 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 
 	task_rsp := trans_rsp.Rsp.DownloadTask
 
-	rsp.Host = getHost(node.Host)
+	rsp.Host = getHost(node)
 	rsp.Port = task_rsp.Port
 	rsp.RecomendBitrate = task_rsp.RecomendBitrate
 	for _, sid := range task_rsp.SidList {
@@ -239,7 +241,7 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 	// update storage
 	file_m.SetStorage(task_rsp.FileStorage)
 
-	rsp.Host = getHost(node.Host)
+	rsp.Host = getHost(node)
 	rsp.Port = task_rsp.Port
 	rsp.RecomendBitrate = task_rsp.RecomendBitrate
 	for _, sid := range task_rsp.SidList {
@@ -259,10 +261,19 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 	clog.Infof("dispatch upload ok, host:%s, port:%d, bps:%d", node.Host, task_rsp.Port, task_rsp.RecomendBitrate)
 }
 
-// 如果是"127.0.0.1", 则返回空,兼容单机版
-func getHost(host string) string {
-	if host == "127.0.0.1" {
+// 如果有预设的public_addr, 则取之
+// 无public_addr则取node的远程地址,如果为"127.0.0.1"则返回空,兼容单机版协议
+func getHost(node *trans.Node) string {
+	var public_addr string
+	node_m, _ := trans_model.GetNode(node.Nid)
+	if node_m != nil {
+		public_addr = node_m.PublicAddr
+	}
+	if public_addr != "" {
+		return public_addr
+	}
+	if node.Host == "127.0.0.1" {
 		return ""
 	}
-	return host
+	return node.Host
 }

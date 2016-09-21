@@ -1,2 +1,13 @@
+2016-09-21 v0.0.1-alpha1 zh.jin <zh.jin@catontechnology.com>
+	主要是issue-14 ~ issue-33的处理
+	* task使用redis保存信息
+	* 不在job表里记录状态,使用job_detail聚合
+	* 存储url记录在file表里,原来记在seg里
+	* 分包序号从1开始,原先是从0开始, 兼容网页处理
+	* 支持ws+ssl传输
+	* 修复传输时进度或状态参数不正确的各种情况
+	* Job cache延时删除,为保证客户端能取到增量数据
+	* 增加node管理api实现
+
 2016-08-24 v0.0.1-preview1 zh.jin <zh.jin@catontechnology.com>
 	第一个预览版,可通过配置文件进行工作
