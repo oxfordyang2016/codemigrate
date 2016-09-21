@@ -148,6 +148,10 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 			jd.GetFile()
 			if jd.File.Size > 0 {
 				jd.Reset()
+			} else {
+				jd.StartTime = time.Now()
+				jd.FinishTime = jd.StartTime
+				jd.Save()
 			}
 		}
 
@@ -201,6 +205,8 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 		}
 		// jzh: 如果是0的文件或者文件夹,则状态就置为DONE, 因为客户端不会发送传输命令
 		if f.Size == 0 {
+			jd.StartTime = time.Now()
+			jd.FinishTime = jd.StartTime
 			jd.State = cydex.TRANSFER_STATE_DONE
 		}
 		if _, err := session.Insert(jd); err != nil {
