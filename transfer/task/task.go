@@ -3,16 +3,17 @@ package task
 import (
 	trans "./.."
 	"./../../utils/cache"
+	"crypto/rand"
 	"cydex"
 	"cydex/transfer"
 	"errors"
 	"fmt"
 	clog "github.com/cihub/seelog"
 	"github.com/garyburd/redigo/redis"
-	"github.com/pborman/uuid"
+	// "github.com/pborman/uuid"
 	URL "net/url"
 	"sync"
-	// "sync/atomic"
+	"sync/atomic"
 	"time"
 )
 
@@ -21,8 +22,8 @@ const (
 )
 
 var (
-	TaskMgr       *TaskManager
-	task_id_start = uint64(10000)
+	TaskMgr      *TaskManager
+	taskno_start = uint32(0)
 )
 
 func init() {
@@ -30,9 +31,9 @@ func init() {
 }
 
 func GenerateTaskId() string {
-	// v := atomic.AddUint64(&task_id_start, 1)
-	// return fmt.Sprintf("%d", v)
-	return uuid.New()
+	v := atomic.AddUint32(&taskno_start, 1)
+	return fmt.Sprintf("%s-%d", TaskMgr.taskid_gen_prefix, v)
+	// return uuid.New()
 }
 
 type TaskObserver interface {
@@ -171,7 +172,7 @@ func (self *Task) String() string {
 		s = "?"
 	}
 	id := self.TaskId
-	if len(id) > 8 {
+	if len(id) > 30 {
 		id = id[:8]
 	}
 	return fmt.Sprintf("<Task(id:%s %s %d)>", id, s, self.NumSeg)
@@ -179,14 +180,12 @@ func (self *Task) String() string {
 
 // 任务管理器
 type TaskManager struct {
-	scheduler TaskScheduler
-	lock      sync.Mutex
-	// tasks        map[string]*Task // task_id -> task
-	observer_idx uint32
-	observers    map[uint32]TaskObserver
-	// task_state_routine_run bool
-	// task_state_chan        chan *transfer.TaskState
-	cache_timeout int
+	scheduler         TaskScheduler
+	lock              sync.Mutex
+	observer_idx      uint32
+	observers         map[uint32]TaskObserver
+	cache_timeout     int
+	taskid_gen_prefix string //issue-35
 }
 
 func NewTaskManager() *TaskManager {
@@ -195,6 +194,13 @@ func NewTaskManager() *TaskManager {
 	t.observers = make(map[uint32]TaskObserver)
 	// t.task_state_chan = make(chan *transfer.TaskState, 10)
 	t.cache_timeout = TASK_CACHE_TIMEOUT
+
+	b := make([]byte, 5)
+	n, err := rand.Read(b)
+	if err != nil {
+		panic(err)
+	}
+	t.taskid_gen_prefix = fmt.Sprintf("%02x", b[:n])
 	return t
 }
 

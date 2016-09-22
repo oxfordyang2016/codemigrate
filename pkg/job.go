@@ -138,7 +138,7 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 
 	// 已经存在的状态要复位,并重新加入track
 	if job_m, _ := models.GetJob(jobid, false); job_m != nil {
-		clog.Warnf("%s is existed, add to track again", jobid)
+		clog.Infof("%s is existed, add to track again", jobid)
 		self.lock.Lock()
 		defer self.lock.Unlock()
 

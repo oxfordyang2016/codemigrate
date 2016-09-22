@@ -92,7 +92,7 @@ func (s *WSServer) connHandle(ws *websocket.Conn) {
 		clog.Trace("node msg: ", msgstring)
 		msg := new(transfer.Message)
 		if err = json.Unmarshal([]byte(msgstring), msg); err != nil {
-			clog.Warnf("json unmarshal error:%s", err)
+			clog.Errorf("json unmarshal error:%s", err)
 			continue
 		}
 

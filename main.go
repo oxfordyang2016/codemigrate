@@ -205,7 +205,7 @@ func setupHttp(cfg *ini.File) (err error) {
 
 	fake_api := sec.Key("fake_api").MustBool(false)
 	if fake_api {
-		clog.Warnf("Enable fake api for standalone running")
+		clog.Infof("Enable fake api for standalone running")
 		EnableFakeApi()
 	}
 
