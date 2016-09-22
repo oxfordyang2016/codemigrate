@@ -6,17 +6,17 @@
 	<outputs formatid="main">
 		<console/>
 
-		<!-- <buffered size="10000" flushperiod="1000"> -->
-		<!-- 	<rollingfile type="date" filename="/tmp/cydex/msg.log" datepattern="2016.07.28" maxrolls="30" /> -->
-		<!-- </buffered> -->
+		<buffered size="10000" flushperiod="1000">
+			<rollingfile type="date" filename="/var/log/cydex/ts/msg.log" datepattern="2016.07.01" maxrolls="30" />
+		</buffered>
         <!--  -->
-		<!-- <filter levels="error,critical"> -->
-		<!-- 	<rollingfile type="date" filename="/tmp/cydex/error/error.log" datepattern="2016.07.28" maxrolls="30" /> -->
-		<!-- </filter> -->
+		<filter levels="warn,error,critical">
+			<rollingfile type="date" filename="/var/log/cydex/ts/err.log" datepattern="2016.07.01" maxrolls="30" />
+		</filter>
 
 	</outputs>
 	<formats>
 		<format id="main" format="%Date(01-02) %Time [%LEVEL]%t %Msg (%RelFile:%Line)%n"/>
-		<format id="error" format="%Date %Time %Msg (%RelFile:%Line)%n"/>
+		<format id="error" format="%Date(01-02) %Time [%LEVEL]%t %Msg (%RelFile:%Line)%n"/>
 	</formats>
 </seelog>

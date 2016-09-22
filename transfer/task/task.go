@@ -302,20 +302,18 @@ func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (
 		return
 	}
 	if node == nil {
-		err = errors.New("Scheduler didn't find suitable node!")
+		err = errors.New("Scheduler didn't find suitable node for uploading")
 		return
 	}
 
 	msg := transfer.NewReqMessage("", "uploadtask", "", 0)
 	msg.Req.UploadTask = req.UploadTaskReq
 	if rsp, err = node.SendRequestSync(msg, timeout); err != nil {
-		// log
-		// clog.Errorf("%s send upload task failed, err:%s", node, err)
 		return
 	}
 
 	if rsp.Rsp.Code != cydex.OK {
-		// clog.Errorf("%s send upload task failed, code:%d", node, rsp.Rsp.Code)
+		err = fmt.Errorf("Response of uploadtask is error: %d", rsp.Rsp.Code)
 		return
 	}
 
@@ -340,17 +338,17 @@ func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duratio
 		return
 	}
 	if node == nil {
-		// Log
+		err = errors.New("Scheduler didn't find suitable node for downloading")
 		return
 	}
 
 	msg := transfer.NewReqMessage("", "downloadtask", "", 0)
 	msg.Req.DownloadTask = req.DownloadTaskReq
 	if rsp, err = node.SendRequestSync(msg, timeout); err != nil {
-		// log
 		return
 	}
 	if rsp.Rsp.Code != cydex.OK {
+		err = fmt.Errorf("Response of downloadtask is error: %d", rsp.Rsp.Code)
 		return
 	}
 

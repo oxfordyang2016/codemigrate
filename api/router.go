@@ -21,7 +21,7 @@ func setupRoute() {
 
 func setupFilter() {
 	beego.InsertFilter("/*", beego.BeforeRouter, func(ctx *context.Context) {
-		clog.Tracef("[http] %s %s [%s]", ctx.Request.Method, ctx.Request.URL, ctx.Request.RemoteAddr)
+		clog.Infof("[http] %s %s [%s]", ctx.Request.Method, ctx.Request.URL, ctx.Request.RemoteAddr)
 	})
 }
 
