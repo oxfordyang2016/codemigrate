@@ -6,6 +6,7 @@ import (
 	"github.com/astaxie/beego"
 	clog "github.com/cihub/seelog"
 	"io/ioutil"
+	"net"
 	"strconv"
 	"time"
 )
@@ -73,4 +74,9 @@ func SetupBodyShow(req, rsp bool) {
 func MarshalUTCTime(t time.Time) string {
 	utc := t.UTC()
 	return fmt.Sprintf("%04d-%02d-%02d %02d:%02d:%02d", utc.Year(), utc.Month(), utc.Day(), utc.Hour(), utc.Minute(), utc.Second())
+}
+
+func verifyIPAddr(addr string) bool {
+	ip := net.ParseIP(addr)
+	return ip != nil
 }

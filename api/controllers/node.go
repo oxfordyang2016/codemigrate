@@ -152,8 +152,17 @@ func (self *NodeController) Patch() {
 			err_cnt++
 		}
 	}
+
 	if req.PublicAddr != nil {
-		if err = node_m.SetPublicAddr(*req.PublicAddr); err != nil {
+		addr := *req.PublicAddr
+		if addr != "" {
+			if !verifyIPAddr(addr) {
+				clog.Errorf("Invalid public addr: %s", addr)
+				rsp.Error = cydex.ErrInvalidParam
+				return
+			}
+		}
+		if err = node_m.SetPublicAddr(addr); err != nil {
 			err_cnt++
 		}
 	}
