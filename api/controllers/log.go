@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"./../../statistics"
 	trans "./../../transfer"
 	"./../../utils"
 	"cydex"
@@ -16,6 +17,8 @@ func (self *LogController) Get() {
 	switch query {
 	case "disk":
 		self.getDiskInfo()
+	case "server_info":
+		self.getServerInfo()
 	default:
 		return
 	}
@@ -49,5 +52,40 @@ func (self *LogController) getDiskInfo() {
 	rsp.UsedStr = utils.GetHumanSize(total - free)
 
 	clog.Infof("storage size: %s, free:%s", rsp.TotalStr, rsp.SpaceStr)
+	return
+}
+
+func (self *LogController) getServerInfo() {
+	rsp := new(cydex.GetServerInfoRsp)
+
+	defer func() {
+		self.Data["json"] = rsp
+		self.ServeJSON()
+	}()
+
+	// 管理员
+	if self.UserLevel != cydex.USER_LEVEL_ADMIN {
+		rsp.Error = cydex.ErrNotAllowed
+		return
+	}
+
+	rx_stat := statistics.TransferMgr.GetStat(cydex.UPLOAD)
+	if rx_stat == nil {
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	tx_stat := statistics.TransferMgr.GetStat(cydex.DOWNLOAD)
+	if tx_stat == nil {
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	rsp.DownloadTraffic = tx_stat.TotalBytes
+	rsp.UploadTraffic = rx_stat.TotalBytes
+	rsp.Bandwidth.MaxOut = tx_stat.MaxBitrate
+	rsp.Bandwidth.MaxIn = rx_stat.MaxBitrate
+	rsp.Bandwidth.OutBandwidth = statistics.TransferMgr.GetCurBitrate(cydex.DOWNLOAD)
+	rsp.Bandwidth.InBandwidth = statistics.TransferMgr.GetCurBitrate(cydex.UPLOAD)
+
+	clog.Tracef("get server info: %+v, %+v", rsp, rsp.Bandwidth)
 	return
 }

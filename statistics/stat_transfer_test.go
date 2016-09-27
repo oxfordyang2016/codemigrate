@@ -110,6 +110,11 @@ func Test_HandleTask(t *testing.T) {
 		})
 
 		Convey("handle Task state", func() {
+			task := &task.Task{
+				TaskId: "t1",
+				Type:   cydex.UPLOAD,
+				Nid:    "n1",
+			}
 			states := []*transfer.TaskState{
 				&transfer.TaskState{TaskId: "t1", TotalBytes: 10, Bitrate: 1000},
 				&transfer.TaskState{TaskId: "t1", TotalBytes: 20, Bitrate: 2000},
@@ -118,7 +123,7 @@ func Test_HandleTask(t *testing.T) {
 			}
 
 			for _, s := range states {
-				StatTransferMgr.TaskStateNotify(nil, s)
+				StatTransferMgr.TaskStateNotify(task, s)
 			}
 			So(StatTransferMgr.stat_tasks, ShouldHaveLength, 1)
 			stat_t := StatTransferMgr.stat_tasks["t1"]

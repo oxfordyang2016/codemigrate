@@ -7,17 +7,21 @@ import (
 	"cydex"
 	"cydex/transfer"
 	// "fmt"
+	"sync"
+	// "time"
 )
 
 type BitrateArray []uint64
 
 // 任务统计
 type StatTask struct {
+	Type       int
 	totalbytes uint64
 	bitrates   []uint64
 }
 
 type StatTransferManager struct {
+	task_mux   sync.Mutex
 	stat_tasks map[string]*StatTask
 }
 
@@ -167,6 +171,9 @@ func (self *StatTransferManager) DelTask(t *task.Task) {
 		return
 	}
 
+	self.task_mux.Lock()
+	defer self.task_mux.Unlock()
+
 	stat_task := self.stat_tasks[t.TaskId]
 	if stat_task == nil || len(stat_task.bitrates) == 0 {
 		return
@@ -218,11 +225,33 @@ func (self *StatTransferManager) TaskStateNotify(t *task.Task, state *transfer.T
 	if state == nil {
 		return
 	}
+	self.task_mux.Lock()
+	defer self.task_mux.Unlock()
+
 	stat_task := self.stat_tasks[state.TaskId]
 	if stat_task == nil {
 		stat_task = new(StatTask)
+		if t == nil {
+			return
+		}
+		stat_task.Type = t.Type
 		self.stat_tasks[state.TaskId] = stat_task
 	}
 	stat_task.totalbytes = state.GetTotalBytes()
 	stat_task.bitrates = append(stat_task.bitrates, state.Bitrate)
+}
+
+func (self *StatTransferManager) GetCurBitrate(typ int) uint64 {
+	self.task_mux.Lock()
+	defer self.task_mux.Unlock()
+	var ret uint64
+	for _, st := range self.stat_tasks {
+		if st.Type != typ {
+			continue
+		}
+		if len(st.bitrates) > 0 {
+			ret += st.bitrates[len(st.bitrates)-1]
+		}
+	}
+	return ret
 }
