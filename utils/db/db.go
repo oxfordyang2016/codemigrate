@@ -10,10 +10,11 @@ import (
 
 var (
 	Engine *xorm.Engine
+	Cache  *xorm.LRUCacher
 )
 
 const (
-	CACHE_ITEM_NUM = 0
+	CACHE_ITEM_NUM = 2000
 )
 
 func CreateEngine(driver, url string, show_sql bool) error {
@@ -22,8 +23,8 @@ func CreateEngine(driver, url string, show_sql bool) error {
 		return err
 	}
 	if CACHE_ITEM_NUM > 0 {
-		cacher := xorm.NewLRUCacher(xorm.NewMemoryStore(), CACHE_ITEM_NUM)
-		Engine.SetDefaultCacher(cacher)
+		Cache = xorm.NewLRUCacher(xorm.NewMemoryStore(), CACHE_ITEM_NUM)
+		// Engine.SetDefaultCacher(cacher)
 	}
 	// Engine.Logger().SetLevel(core.LOG_DEBUG)
 	Engine.ShowSQL(show_sql)
@@ -45,4 +46,13 @@ func SyncTables(tables []interface{}) error {
 		}
 	}
 	return nil
+}
+
+func MapCache(tables []interface{}) {
+	if Cache == nil {
+		return
+	}
+	for _, t := range tables {
+		Engine.MapCacher(t, Cache)
+	}
 }

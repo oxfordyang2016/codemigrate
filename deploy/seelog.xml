@@ -7,11 +7,11 @@
 		<console/>
 
 		<buffered size="10000" flushperiod="1000">
-			<rollingfile type="date" filename="/var/log/cydex/ts/msg.log" datepattern="2016.01.02" maxrolls="30" />
+			<rollingfile type="date" filename="/var/log/cydex/ts/msg.log" datepattern="2006.01.02" maxrolls="30" />
 		</buffered>
         <!--  -->
 		<filter levels="warn,error,critical">
-			<rollingfile type="date" filename="/var/log/cydex/ts/err.log" datepattern="2016.01.02" maxrolls="30" />
+			<rollingfile type="date" filename="/var/log/cydex/ts/err.log" datepattern="2006.01.02" maxrolls="30" />
 		</filter>
 
 	</outputs>

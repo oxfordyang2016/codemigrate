@@ -7,9 +7,11 @@ import (
 
 var (
 	Tables []interface{} = []interface{}{
-		new(Node), new(Zone),
+		new(Transfer),
 	}
-	Caches []interface{} = []interface{}{}
+	Caches []interface{} = []interface{}{
+		new(Transfer),
+	}
 )
 
 func DB() *xorm.Engine {
@@ -18,4 +20,11 @@ func DB() *xorm.Engine {
 
 func SyncTables() error {
 	return db.SyncTables(Tables)
+}
+
+func SessionRelease(sess *xorm.Session) {
+	if !sess.IsCommitedOrRollbacked {
+		sess.Rollback()
+	}
+	sess.Close()
 }
