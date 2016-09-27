@@ -10,6 +10,9 @@ var (
 		new(Pkg), new(File), new(Seg),
 		new(Job), new(JobDetail),
 	}
+	Caches []interface{} = []interface{}{
+		new(Pkg), new(File), new(Seg),
+	}
 )
 
 func DB() *xorm.Engine {
