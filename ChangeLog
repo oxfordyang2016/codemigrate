@@ -1,5 +1,5 @@
-2016-09-21 v0.0.1-alpha1 zh.jin <zh.jin@catontechnology.com>
-	主要是issue-14 ~ issue-33的处理
+2016-09-23 v0.0.1-alpha1 zh.jin <zh.jin@catontechnology.com>
+	主要是issue-14 ~ issue-36的处理
 	* task使用redis保存信息
 	* 不在job表里记录状态,使用job_detail聚合
 	* 存储url记录在file表里,原来记在seg里
