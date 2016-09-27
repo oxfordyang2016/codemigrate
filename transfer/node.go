@@ -6,14 +6,18 @@ import (
 	"cydex/transfer"
 	"errors"
 	"fmt"
+	clog "github.com/cihub/seelog"
 	"github.com/pborman/uuid"
 	"golang.org/x/net/websocket"
 	"net"
 	"strings"
 	"sync"
 	"time"
-	// "log"
-	// "net/http"
+)
+
+const (
+	// 响应消息的超时时间,如果超过则需要删除
+	MESSAGE_TIMEOUT = 5 * time.Minute
 )
 
 var (
@@ -23,10 +27,6 @@ var (
 func init() {
 	NodeMgr = NewNodeManager()
 }
-
-// 任务状态回调
-// zh.jin: 不能import task, 会循环import, 所以设置回调
-type TaskStateNotifyCallback func(nid string, state *transfer.TaskState) error
 
 // 注册Node, 分配tnid
 func registerNode(req *transfer.RegisterReq) (code int, tnid string, err error) {
@@ -53,15 +53,16 @@ type NodeObserver interface {
 
 // TransferNode管理
 type NodeManager struct {
-	mux            sync.Mutex
-	id_map         map[string]*Node // id->node
-	observers      []NodeObserver
-	task_notify_cb TaskStateNotifyCallback
+	StateChan chan []*transfer.TaskState
+	mux       sync.Mutex
+	id_map    map[string]*Node // id->node
+	observers []NodeObserver
 }
 
 func NewNodeManager() *NodeManager {
 	nm := new(NodeManager)
 	nm.id_map = make(map[string]*Node)
+	nm.StateChan = make(chan []*transfer.TaskState)
 	return nm
 }
 
@@ -80,18 +81,24 @@ func (self *NodeManager) GetByNid(id string) *Node {
 }
 
 func (self *NodeManager) AddNode(node *Node) {
-	defer self.mux.Unlock()
+	clog.Infof("Node Add: %+v", node)
 	self.mux.Lock()
+	defer self.mux.Unlock()
+	n := self.id_map[node.Nid]
+	if n != nil {
+		// node with same nid exists, close the old connection.
+		n.Close(false)
+	}
 	self.id_map[node.Nid] = node
 	for _, o := range self.observers {
 		o.AddNode(node)
 	}
-	Logger.Printf("Add node %+v\n", node)
 }
 
 func (self *NodeManager) DelNode(nid string) {
-	defer self.mux.Unlock()
+	clog.Infof("Node Delete: %s", nid)
 	self.mux.Lock()
+	defer self.mux.Unlock()
 	node, ok := self.id_map[nid]
 	if ok {
 		delete(self.id_map, nid)
@@ -110,28 +117,51 @@ func (self *NodeManager) AddObserver(observer NodeObserver) {
 	self.observers = append(self.observers, observer)
 }
 
-func (self *NodeManager) RegisterTaskStateNotify(cb TaskStateNotifyCallback) {
-	self.task_notify_cb = cb
+func (self *NodeManager) WalkNodes(walk_fun func(n *Node)) {
+	if walk_fun == nil {
+		return
+	}
+	self.mux.Lock()
+	defer self.mux.Unlock()
+	for _, node := range self.id_map {
+		walk_fun(node)
+	}
 }
 
 type NodeInfo struct {
-	Version           string
-	NetAddr           string
-	OS                string
-	NetSpeed          uint32
-	Storage           []*transfer.StorageInfo
-	TotalStorage      uint64
-	FreeStorage       uint64
-	CpuUsage          uint32
-	TotalMem          uint64
-	FreeMem           uint64
-	UploadBandwidth   uint64
-	DownloadBandwidth uint64
+	Version         string
+	F2tpVersion     string
+	NetAddr         string
+	OS              string
+	NetSpeed        uint32
+	Storage         []*transfer.StorageInfo
+	TotalStorage    uint64
+	FreeStorage     uint64
+	CpuUsage        uint32
+	TotalMem        uint64
+	FreeMem         uint64
+	RxBandwidth     uint64
+	TxBandwidth     uint64
+	UploadTaskCnt   int
+	DownloadTaskCnt int
+}
+
+type TimeMessage struct {
+	*transfer.Message
+	ts time.Time
+}
+
+func NewTimeMessage(msg *transfer.Message) *TimeMessage {
+	return &TimeMessage{
+		msg, time.Now(),
+	}
 }
 
 // TransferNode
 type Node struct {
-	*models.Node
+	Nid    string
+	ZoneId string
+	model  *models.Node
 
 	// 运行时数据
 	Host  string
@@ -142,16 +172,23 @@ type Node struct {
 	// alive_interval uint32
 	login_at time.Time
 	ws       *websocket.Conn
-	seq_lock sync.Mutex
+	lock     sync.Mutex
 	seq      uint32
-	rsp_chan chan *transfer.Message
-	server   *WSServer
+	// rsp_chan chan *TimeMessage
+	rsp_sem     chan int
+	rsp_lock    sync.Mutex
+	rsp_msgs    map[uint32]*TimeMessage
+	server      *WSServer
+	closed      bool
+	remote_addr string
 }
 
 func NewNode(ws *websocket.Conn, server *WSServer) *Node {
 	n := new(Node)
 	n.server = server
 	n.SetWSConn(ws)
+	n.rsp_sem = make(chan int)
+	n.rsp_msgs = make(map[uint32]*TimeMessage)
 	return n
 }
 
@@ -163,6 +200,7 @@ func (self *Node) SetWSConn(ws *websocket.Conn) {
 	self.ws = ws
 	if ws != nil {
 		addr := ws.Request().RemoteAddr
+		self.remote_addr = addr
 		host, _, err := net.SplitHostPort(addr)
 		if err == nil {
 			self.Host = host
@@ -178,8 +216,8 @@ func (self *Node) Update(update_login_time bool) {
 		t := time.Now().Add(time.Duration(self.server.config.KeepaliveInterval) * time.Second * 3)
 		self.ws.SetDeadline(t)
 	}
-	if update_login_time && self.Node != nil {
-		self.Node.UpdateLoginTime(time.Now())
+	if update_login_time && self.model != nil {
+		self.model.UpdateLoginTime(time.Now())
 	}
 }
 
@@ -187,11 +225,11 @@ func (self *Node) HandleMsg(msg *transfer.Message) (rsp *transfer.Message, err e
 	if msg.IsReq() {
 		rsp = msg.BuildRsp()
 		rsp.Rsp.Code = cydex.OK
-		if msg == nil {
-			rsp.Rsp.Code = cydex.ErrInvalidParam
-			rsp.Rsp.Reason = "Invalid Param"
-			return
-		}
+		// if msg == nil {
+		// 	rsp.Rsp.Code = cydex.ErrInvalidParam
+		// 	rsp.Rsp.Reason = "Invalid Param"
+		// 	return
+		// }
 	}
 
 	lower_cmd := strings.ToLower(msg.Cmd)
@@ -213,7 +251,10 @@ func (self *Node) HandleMsg(msg *transfer.Message) (rsp *transfer.Message, err e
 			self.Update(false)
 		}
 	} else {
-		self.rsp_chan <- msg
+		self.rsp_lock.Lock()
+		self.rsp_msgs[msg.Seq] = NewTimeMessage(msg)
+		self.rsp_lock.Unlock()
+		self.rsp_sem <- 1
 	}
 	return
 }
@@ -238,7 +279,7 @@ func (self *Node) handleRegister(msg, rsp *transfer.Message) (err error) {
 }
 
 func (self *Node) IsRegisted() bool {
-	return self.Node != nil
+	return self.model != nil
 }
 
 func (self *Node) IsLogined() bool {
@@ -254,23 +295,26 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 	}
 
 	nid := msg.From
-	n := NodeMgr.GetByNid(nid)
-	if n != nil {
-		// node with same nid is logined, and should kickout
-		n.Close(true)
-	}
-	if self.Node, err = models.GetNode(nid); err != nil {
+	// n := NodeMgr.GetByNid(nid)
+	// if n != nil {
+	// 	// node with same nid is logined, and should kickout
+	// 	n.Close(true)
+	// }
+	if self.model, err = models.GetNode(nid); err != nil {
 		return
 	}
-	if self.Node == nil {
+	if self.model == nil {
 		err = fmt.Errorf("%s is not registed", nid)
 		rsp.Rsp.Code = cydex.ErrInvalidParam
 		rsp.Rsp.Reason = err.Error()
 		return
 	}
 
+	self.Nid = nid
+	self.ZoneId = self.model.ZoneId
 	self.Token = uuid.New()
 	self.Info.Version = msg.Req.Login.Version
+	self.Info.F2tpVersion = msg.Req.Login.F2tpVersion
 	self.Info.NetAddr = msg.Req.Login.NetAddr
 	self.Info.OS = msg.Req.Login.OS
 	self.Info.NetSpeed = msg.Req.Login.NetSpeed
@@ -280,11 +324,17 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 	self.Info.CpuUsage = msg.Req.Login.CpuUsage
 	self.Info.TotalMem = msg.Req.Login.TotalMem
 	self.Info.FreeMem = msg.Req.Login.FreeMem
-	self.Info.UploadBandwidth = msg.Req.Login.UploadBandwidth
-	self.Info.DownloadBandwidth = msg.Req.Login.DownloadBandwidth
-	self.rsp_chan = make(chan *transfer.Message)
+	self.Info.RxBandwidth = msg.Req.Login.RxBandwidth
+	self.Info.TxBandwidth = msg.Req.Login.TxBandwidth
 	self.login_at = time.Now()
 	self.Update(true)
+
+	if self.model.RxBandwidth != msg.Req.Login.RxBandwidth {
+		self.model.SetRxBandwidth(msg.Req.Login.RxBandwidth)
+	}
+	if self.model.TxBandwidth != msg.Req.Login.TxBandwidth {
+		self.model.SetTxBandwidth(msg.Req.Login.TxBandwidth)
+	}
 
 	NodeMgr.AddNode(self)
 
@@ -302,7 +352,7 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 	t, _ := time.Now().MarshalText()
 	rsp.Rsp.Login = &transfer.LoginRsp{
 		Token:                  self.Token,
-		ZoneId:                 self.Zid,
+		ZoneId:                 self.ZoneId,
 		AliveInterval:          alive_interval,
 		TransferNotifyInterval: transfer_notify_interval,
 		Time:    string(t),
@@ -316,7 +366,22 @@ func (self *Node) handleKeepAlive(msg, rsp *transfer.Message) (err error) {
 		err = fmt.Errorf("%s verify failed, token:%s, remote:[nid:%s, token:%s]", self, self.Token, msg.From, msg.Token)
 		rsp.Rsp.Code = cydex.ErrInvalidLicense
 		rsp.Rsp.Reason = err.Error()
+		return
 	}
+
+	if msg.Req == nil || msg.Req.Keepalive == nil {
+		err = fmt.Errorf("Invalid keepalive msg")
+		rsp.Rsp.Code = cydex.ErrInvalidParam
+		return
+	}
+
+	self.Info.TotalStorage = msg.Req.Keepalive.TotalStorage
+	self.Info.FreeStorage = msg.Req.Keepalive.FreeStorage
+	self.Info.CpuUsage = msg.Req.Keepalive.CpuUsage
+	self.Info.TotalMem = msg.Req.Keepalive.TotalMem
+	self.Info.FreeMem = msg.Req.Keepalive.FreeMem
+	self.Info.RxBandwidth = msg.Req.Keepalive.RxBandwidth
+	self.Info.TxBandwidth = msg.Req.Keepalive.TxBandwidth
 
 	return
 }
@@ -334,13 +399,10 @@ func (self *Node) handleTransferNotify(msg, rsp *transfer.Message) (err error) {
 		return
 	}
 
-	if msg.Req.TransferNotify.TaskStateList != nil && NodeMgr.task_notify_cb != nil {
-		for _, r := range msg.Req.TransferNotify.TaskStateList {
-			if err = NodeMgr.task_notify_cb(self.Nid, r); err != nil {
-				return
-			}
-		}
-	}
+	NodeMgr.StateChan <- msg.Req.TransferNotify.TaskStateList
+	// for _, r := range msg.Req.TransferNotify.TaskStateList {
+	// 	NodeMgr.StateChan <- r
+	// }
 
 	return
 }
@@ -349,16 +411,22 @@ func (self *Node) SendRequest(msg *transfer.Message) error {
 	if !msg.IsReq() {
 		return errors.New("msg is not request")
 	}
-	self.seq_lock.Lock()
-	msg.Seq = self.seq
-	self.seq++
-	self.seq_lock.Unlock()
 	return self.SendMessage(msg)
 }
 
 func (self *Node) SendMessage(msg *transfer.Message) error {
 	if msg == nil {
 		return errors.New("msg is nil")
+	}
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
+	if msg.IsReq() {
+		msg.Seq = self.seq
+		self.seq++
+	}
+	if self.closed {
+		return fmt.Errorf("%s send msg failed because closed", self)
 	}
 	if self.ws != nil {
 		websocket.JSON.Send(self.ws, *msg)
@@ -368,15 +436,33 @@ func (self *Node) SendMessage(msg *transfer.Message) error {
 
 // 同步获取消息
 func (self *Node) SendRequestSync(msg *transfer.Message, timeout time.Duration) (rsp *transfer.Message, err error) {
+
 	if err = self.SendRequest(msg); err != nil {
 		return
 	}
 
+	var alive bool
+
 	select {
-	case rsp = <-self.rsp_chan:
-		if rsp.Seq != msg.Seq || rsp.Cmd != msg.Cmd {
-			err = fmt.Errorf("%s rsp is not match, %s %s", self, msg, rsp)
-			rsp = nil
+	case _, alive = <-self.rsp_sem:
+		if !alive {
+			err = fmt.Errorf("%s rsp_sem closed, maybe disconnected")
+			return nil, err
+		}
+
+		self.rsp_lock.Lock()
+		defer self.rsp_lock.Unlock()
+		time_msg, _ := self.rsp_msgs[msg.Seq]
+		if time_msg != nil && time_msg.Message != nil {
+			rsp = time_msg.Message
+		}
+		delete(self.rsp_msgs, msg.Seq)
+
+		// 删除超时的响应消息
+		for _, m := range self.rsp_msgs {
+			if time.Since(m.ts) >= MESSAGE_TIMEOUT {
+				delete(self.rsp_msgs, m.Seq)
+			}
 		}
 	case <-time.After(timeout):
 		err = fmt.Errorf("%s msg %s wait rsp timeout", self, msg.Cmd)
@@ -384,21 +470,31 @@ func (self *Node) SendRequestSync(msg *transfer.Message, timeout time.Duration) 
 	return
 }
 
-func (self *Node) Close(close_conn bool) {
-	if self.rsp_chan != nil {
-		close(self.rsp_chan)
+func (self *Node) Close(del_from_mgr bool) {
+	self.lock.Lock()
+	self.closed = true
+	if self.rsp_sem != nil {
+		close(self.rsp_sem)
 	}
-	if close_conn && self.ws != nil {
+	if self.ws != nil {
 		self.ws.Close()
 	}
-	if self.Node != nil {
+	self.lock.Unlock()
+
+	if self.model != nil {
+		self.model.UpdateLogoutTime(time.Now())
+	}
+	if del_from_mgr {
 		NodeMgr.DelNode(self.Nid)
-		self.Node.UpdateLogoutTime(time.Now())
 	}
 }
 
 func (self *Node) String() string {
-	return fmt.Sprintf("<Node(%s %s)>", self.Nid, self.Host)
+	nid := self.Nid
+	if len(nid) > 8 {
+		nid = nid[:8]
+	}
+	return fmt.Sprintf("<Node(%s %s)>", nid, self.remote_addr)
 }
 
 func (self *Node) OnlineDuration() time.Duration {
@@ -406,4 +502,24 @@ func (self *Node) OnlineDuration() time.Duration {
 		return time.Duration(0)
 	}
 	return time.Since(self.login_at)
+}
+
+func (self *Node) OnlineAt() time.Time {
+	return self.login_at
+}
+
+func (self *Node) AddTaskCnt(typ int, v int) {
+	var cnt *int
+	switch typ {
+	case cydex.UPLOAD:
+		cnt = &self.Info.UploadTaskCnt
+	case cydex.DOWNLOAD:
+		cnt = &self.Info.DownloadTaskCnt
+	default:
+		return
+	}
+	*cnt += v
+	if *cnt < 0 {
+		*cnt = 0
+	}
 }

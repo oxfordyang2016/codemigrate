@@ -1,7 +1,7 @@
 package transfer
 
 import (
-	"./../db"
+	"./../utils/db"
 	"./models"
 	"cydex"
 	"cydex/transfer"
@@ -43,9 +43,7 @@ func Test_NodeManager(t *testing.T) {
 	Convey("Test Node Manager", t, func() {
 		Convey("Test Add Node", func() {
 			n := &Node{
-				Node: &models.Node{
-					Nid: "n1",
-				},
+				Nid:   "n1",
 				Token: "12345",
 				Host:  "192.168.2.3",
 			}
@@ -65,9 +63,7 @@ func Test_NodeManager(t *testing.T) {
 			var mo MyObserver
 			NodeMgr.AddObserver(&mo)
 			n := &Node{
-				Node: &models.Node{
-					Nid: "n1",
-				},
+				Nid:   "n1",
 				Token: "12345",
 				Host:  "192.168.2.3",
 			}
@@ -79,28 +75,20 @@ func Test_NodeManager(t *testing.T) {
 	})
 }
 
+func init() {
+	if TEST_DB != ":memory:" {
+		os.Remove(TEST_DB)
+	}
+	db.CreateEngine("sqlite3", TEST_DB, false)
+	models.SyncTables()
+}
+
 func Test_Node(t *testing.T) {
-	var err error
 	var seq uint32
 	var test_nid string
 	var test_token string
 
-	if TEST_DB != ":memory:" {
-		os.Remove(TEST_DB)
-	}
-
 	Convey("Test Node", t, func() {
-		Convey("DB Init using sqlite3", func() {
-			Convey("create", func() {
-				err = db.CreateDefaultDBEngine("sqlite3", TEST_DB, false)
-				So(err, ShouldBeNil)
-			})
-			Convey("Sync Tables", func() {
-				err = models.DBSyncTables()
-				So(err, ShouldBeNil)
-			})
-		})
-
 		Convey("Test Node register", func() {
 			Convey("normal register", func() {
 				seq++
@@ -195,13 +183,13 @@ func Test_Node(t *testing.T) {
 				msg := transfer.NewReqMessage(test_nid, "keepalive", test_token, seq)
 				msg.Req = &transfer.Request{
 					Keepalive: &transfer.KeepaliveReq{
-						CpuUsage:          89,
-						TotalStorage:      1234,
-						FreeStorage:       12,
-						TotalMem:          128 * 1024 * 1024,
-						FreeMem:           123 * 1024,
-						UploadBandwidth:   100,
-						DownloadBandwidth: 100,
+						CpuUsage:     89,
+						TotalStorage: 1234,
+						FreeStorage:  12,
+						TotalMem:     128 * 1024 * 1024,
+						FreeMem:      123 * 1024,
+						RxBandwidth:  100,
+						TxBandwidth:  100,
 					},
 				}
 				node := NodeMgr.GetByNid(test_nid)
@@ -217,13 +205,13 @@ func Test_Node(t *testing.T) {
 				msg := transfer.NewReqMessage(test_nid, "keepalive", "invalid token", seq)
 				msg.Req = &transfer.Request{
 					Keepalive: &transfer.KeepaliveReq{
-						CpuUsage:          89,
-						TotalStorage:      1234,
-						FreeStorage:       12,
-						TotalMem:          128 * 1024 * 1024,
-						FreeMem:           123 * 1024,
-						UploadBandwidth:   100,
-						DownloadBandwidth: 100,
+						CpuUsage:     89,
+						TotalStorage: 1234,
+						FreeStorage:  12,
+						TotalMem:     128 * 1024 * 1024,
+						FreeMem:      123 * 1024,
+						RxBandwidth:  100,
+						TxBandwidth:  100,
 					},
 				}
 				node := NodeMgr.GetByNid(test_nid)
@@ -253,7 +241,7 @@ func Test_Node(t *testing.T) {
 					m.Rsp.Code = cydex.OK
 					m.Rsp.UploadTask = &transfer.UploadTaskRsp{
 						SidList:         []string{"s1", "s2", "s3"},
-						SidStorage:      []string{"s1_s", "s2_s", "s3_s"},
+						FileStorage:     "fid_s",
 						Port:            1234,
 						RecomendBitrate: 123,
 					}

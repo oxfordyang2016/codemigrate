@@ -6,7 +6,7 @@ import (
 
 // 区域, 多个Node在一个Zone,共享同一存储空间
 type Zone struct {
-	Id       uint64    `xorm:"pk autoincr"`
+	Id       int64     `xorm:"pk autoincr"`
 	Zid      string    `xorm:"varchar(255) not null unique"`
 	Name     string    `xorm:"varchar(255) not null"`
 	CreateAt time.Time `xorm:"DateTime created"`
@@ -35,4 +35,8 @@ func GetZone(zid string) (z *Zone, err error) {
 		return nil, nil
 	}
 	return z, nil
+}
+
+func (self *Zone) TableName() string {
+	return "transfer_zone"
 }

@@ -1,0 +1,22 @@
+<seelog minlevel="trace">
+	<exceptions>
+		<exception funcpattern="*main.test*Something*" minlevel="info"/>
+		<!-- <exception filepattern="*main.go" minlevel="trace"/> -->
+	</exceptions>
+	<outputs formatid="main">
+		<console/>
+
+		<buffered size="10000" flushperiod="1000">
+			<rollingfile type="date" filename="/var/log/cydex/ts/msg.log" datepattern="2006.01.02" maxrolls="30" />
+		</buffered>
+        <!--  -->
+		<filter levels="warn,error,critical">
+			<rollingfile type="date" filename="/var/log/cydex/ts/err.log" datepattern="2006.01.02" maxrolls="30" />
+		</filter>
+
+	</outputs>
+	<formats>
+		<format id="main" format="%Date(01-02) %Time [%LEVEL]%t %Msg (%RelFile:%Line)%n"/>
+		<format id="error" format="%Date(01-02) %Time [%LEVEL]%t %Msg (%RelFile:%Line)%n"/>
+	</formats>
+</seelog>

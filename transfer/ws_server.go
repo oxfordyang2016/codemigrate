@@ -4,6 +4,7 @@ import (
 	"cydex/transfer"
 	"encoding/json"
 	"fmt"
+	clog "github.com/cihub/seelog"
 	"golang.org/x/net/websocket"
 	"log"
 	"net/http"
@@ -11,6 +12,10 @@ import (
 )
 
 type WSServerConfig struct {
+	// ssl信息
+	UseSSL   bool
+	CertFile string
+	KeyFile  string
 	// 连接上来后多长时间没有响应就关闭连接
 	ConnDeadline time.Duration
 	// 心跳周期 in second
@@ -21,7 +26,7 @@ type WSServerConfig struct {
 
 var DefaultConfig WSServerConfig = WSServerConfig{
 	ConnDeadline:           10 * time.Second,
-	KeepaliveInterval:      300,
+	KeepaliveInterval:      180,
 	TransferNotifyInterval: 3,
 }
 
@@ -56,21 +61,24 @@ func (self *WSServer) SetVersion(v string) {
 func (s *WSServer) Serve() {
 	http.Handle(s.url, websocket.Handler(s.connHandle))
 	addr := fmt.Sprintf(":%d", s.port)
-	log.Fatal(http.ListenAndServe(addr, nil))
+	if s.config.UseSSL {
+		log.Fatal(http.ListenAndServeTLS(addr, s.config.CertFile, s.config.KeyFile, nil))
+	} else {
+		log.Fatal(http.ListenAndServe(addr, nil))
+	}
 }
 
 func (s *WSServer) connHandle(ws *websocket.Conn) {
 	var node *Node
 	var msgstring string
-	var msg transfer.Message
 	var rsp *transfer.Message
 	var err error
 
 	// cleanup
 	defer func() {
 		if node != nil {
+			clog.Warnf("Node disconnected: %+v", node)
 			node.Close(true)
-			Logger.Printf("Node Disconnected: %+v\n", node)
 		}
 	}()
 
@@ -81,18 +89,20 @@ func (s *WSServer) connHandle(ws *websocket.Conn) {
 			log.Print(err)
 			break
 		}
-		log.Print(msgstring)
-		if err = json.Unmarshal([]byte(msgstring), &msg); err != nil {
-			log.Print(err)
-			break
+		clog.Trace("node msg: ", msgstring)
+		msg := new(transfer.Message)
+		if err = json.Unmarshal([]byte(msgstring), msg); err != nil {
+			clog.Errorf("json unmarshal error:%s", err)
+			continue
 		}
 
-		rsp, err = node.HandleMsg(&msg)
+		rsp, err = node.HandleMsg(msg)
 		if rsp != nil {
+			// clog.Trace("node rsp:", rsp)
 			node.SendMessage(rsp)
 		}
 		if err != nil {
-			Logger.Printf("node %s handle msg error: %s\n", node, err)
+			clog.Errorf("%s handle msg error: %s", node, err)
 			break
 		}
 	}

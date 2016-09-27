@@ -3,11 +3,16 @@ package task
 import (
 	// trans "./../"
 	// "./../models"
+	"./../../utils/cache"
 	"cydex"
 	"cydex/transfer"
 	. "github.com/smartystreets/goconvey/convey"
 	"testing"
 )
+
+func init() {
+	cache.Init("redis://:MyCydex@127.0.0.1:6379", 3, 240)
+}
 
 type FakeTaskObserver struct {
 	cnt        int
@@ -27,6 +32,7 @@ func (self *FakeTaskObserver) TaskStateNotify(t *Task, state *transfer.TaskState
 }
 
 func Test_TaskManager(t *testing.T) {
+
 	Convey("Test TaskMgr", t, func() {
 		Convey("task controller and observer", func() {
 			fo := new(FakeTaskObserver)
@@ -37,14 +43,24 @@ func Test_TaskManager(t *testing.T) {
 			}
 			TaskMgr.AddTask(t1)
 			So(fo.cnt, ShouldEqual, 1)
+
+			tasks, err := LoadTasksFromCache(nil)
+			So(err, ShouldBeNil)
+			So(tasks, ShouldNotBeNil)
+
 			TaskMgr.DelTask("t0")
 			So(fo.cnt, ShouldEqual, 0)
+
+			So(t1.Nid, ShouldBeEmpty)
+			So(t1.IsDispatched(), ShouldBeFalse)
 
 			Convey("handle task state", func() {
 				state := &transfer.TaskState{
 					TaskId:     "t0",
 					State:      "transferring",
+					Sid:        "s1",
 					TotalBytes: 123,
+					Bitrate:    1000,
 				}
 				So(fo.update_cnt, ShouldEqual, 0)
 				TaskMgr.handleTaskState(state)

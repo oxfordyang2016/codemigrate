@@ -30,7 +30,7 @@ func (self *RoundRobinUploadScheduler) DispatchUpload(req *UploadReq) (n *trans.
 		if req == nil {
 			found = true
 		} else {
-			if n.Info.FreeStorage >= req.Size {
+			if n.Info.FreeStorage >= GetReqSize(req) {
 				found = true
 			}
 		}
@@ -41,7 +41,7 @@ func (self *RoundRobinUploadScheduler) DispatchUpload(req *UploadReq) (n *trans.
 	}
 	if !found {
 		n = nil
-		err = errors.New("No found")
+		err = errors.New("No valid node to schedule")
 	}
 	return
 }
@@ -55,8 +55,8 @@ func (self *RoundRobinUploadScheduler) AddNode(n *trans.Node) {
 
 func (self *RoundRobinUploadScheduler) DelNode(n *trans.Node) {
 	// 删除失去连接的node
-	defer self.lock.Unlock()
 	self.lock.Lock()
+	defer self.lock.Unlock()
 
 	for e := self.node_queue.Front(); e != nil; e = e.Next() {
 		if e.Value == n {

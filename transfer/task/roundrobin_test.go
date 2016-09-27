@@ -2,7 +2,7 @@ package task
 
 import (
 	trans "./../"
-	"./../models"
+	// "./../models"
 	"cydex/transfer"
 	// "fmt"
 	. "github.com/smartystreets/goconvey/convey"
@@ -11,9 +11,10 @@ import (
 
 func CreateNode(nid string, free_size uint64) *trans.Node {
 	node := trans.NewNode(nil, nil)
-	node.Node = &models.Node{
-		Nid: nid,
-	}
+	node.Nid = nid
+	// node.Node = &models.Node{
+	// 	Nid: nid,
+	// }
 	node.Info.FreeStorage = free_size
 	return node
 }
