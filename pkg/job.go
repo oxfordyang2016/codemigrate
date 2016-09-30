@@ -683,6 +683,17 @@ func (self *JobManager) GetTrackOfDelete(uid string, typ int, remove, mutex bool
 	return
 }
 
+func (self *JobManager) GetUnFinishedJobCount() (upload, download int) {
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
+	for _, track := range self.track_pkgs {
+		upload += len(track.Uploads)
+		download += len(track.Downloads)
+	}
+	return
+}
+
 func (self *JobManager) ClearTracks(mutex bool) {
 	if mutex {
 		defer self.lock.Unlock()

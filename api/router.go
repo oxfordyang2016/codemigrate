@@ -17,6 +17,9 @@ func setupRoute() {
 	beego.Router("/api/v1/nodes", &c.NodesController{})
 	beego.Router("/api/v1/nodes/:id", &c.NodeController{})
 	beego.Router("/api/v1/nodes/:id/status", &c.NodeStatusController{})
+	beego.Router("/api/v1/statistics/transfer", &c.StatTransferController{})
+	beego.Router("/api/v1/statistics/transfer/:node_id", &c.StatTransferController{})
+	beego.Router("/api/v1/statistics/pkg", &c.StatPkgController{})
 }
 
 func setupFilter() {
