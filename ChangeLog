@@ -1,3 +1,7 @@
+2016-10-08 v0.0.1-alpha2 zh.jin <zh.jin@catontechnology.com>
+	* 增加统计接口
+	* 修正删除无下载者的包裹,仍保留track的问题, issue-37
+
 2016-09-23 v0.0.1-alpha1 zh.jin <zh.jin@catontechnology.com>
 	主要是issue-14 ~ issue-36的处理
 	* task使用redis保存信息
