@@ -5,6 +5,8 @@ import (
 	api_ctrl "./api/controllers"
 	"./pkg"
 	pkg_model "./pkg/models"
+	"./statistics"
+	stat_model "./statistics/models"
 	trans "./transfer"
 	trans_model "./transfer/models"
 	"./transfer/task"
@@ -18,7 +20,7 @@ import (
 )
 
 const (
-	VERSION = "0.0.1-alpha1"
+	VERSION = "0.0.1-alpha2"
 )
 
 var (
@@ -58,12 +60,29 @@ func setupDB(cfg *ini.File) (err error) {
 		return
 	}
 	// 同步表结构
-	if err = pkg_model.SyncTables(); err != nil {
+	var tables []interface{}
+	tables = append(tables, pkg_model.Tables...)
+	tables = append(tables, trans_model.Tables...)
+	tables = append(tables, stat_model.Tables...)
+	if err = db.SyncTables(tables); err != nil {
 		return
 	}
-	if err = trans_model.SyncTables(); err != nil {
-		return
-	}
+	// if err = pkg_model.SyncTables(); err != nil {
+	// 	return
+	// }
+	// if err = trans_model.SyncTables(); err != nil {
+	// 	return
+	// }
+	// if err = stat_model.SyncTables(); err != nil {
+	// 	return
+	// }
+
+	// 设置cache
+	var caches []interface{}
+	caches = append(caches, pkg_model.Caches...)
+	caches = append(caches, trans_model.Caches...)
+	caches = append(caches, stat_model.Caches...)
+	db.MapCache(caches)
 	return
 }
 
@@ -238,8 +257,10 @@ func setupApplication(cfg *ini.File) (err error) {
 func run() {
 	// setup version
 	ws_server.SetVersion(VERSION)
-	// add job listen
+	// task add observer for job
 	task.TaskMgr.AddObserver(pkg.JobMgr)
+	// task add observer for statistics
+	task.TaskMgr.AddObserver(statistics.TransferMgr)
 	// 从数据库导入track
 	pkg.JobMgr.LoadTracks()
 

@@ -65,10 +65,9 @@ func updateJobDetail(jd *models.JobDetail, state *transfer.TaskState, seg_state 
 		// NOTE: 因为f2tp下载时一个片段结束后得到的totalbytes是偏小的,所以使用数据库里的size来计算
 		seg_m, _ := models.GetSeg(state.Sid)
 		if seg_m != nil {
-			jd.FinishedSize += seg_m.Size
-		} else {
-			jd.FinishedSize += state.TotalBytes
+			state.RealTotalBytes = seg_m.Size
 		}
+		jd.FinishedSize += state.GetTotalBytes()
 		jd.CurSegSize = 0
 		jd.NumFinishedSegs++
 		save = true
@@ -681,6 +680,17 @@ func (self *JobManager) GetTrackOfDelete(uid string, typ int, remove, mutex bool
 		defer self.lock.Unlock()
 	}
 	pids = self.getTrackOfDelete(uid, typ, remove)
+	return
+}
+
+func (self *JobManager) GetUnFinishedJobCount() (upload, download int) {
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
+	for _, track := range self.track_pkgs {
+		upload += len(track.Uploads)
+		download += len(track.Downloads)
+	}
 	return
 }
 
