@@ -62,7 +62,6 @@ func (self *StatTransferController) getSingle(node_id string, rsp *cydex.QuerySt
 	rsp.TxStat = tx_stat
 }
 
-// TODO
 type StatPkgController struct {
 	BaseController
 }

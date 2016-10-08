@@ -883,6 +883,9 @@ func deleteJob(job *pkg_model.Job) {
 			continue
 		}
 	}
+
+	// 删除cache, 因为该pkg可能没有downloader
+	pkg.JobMgr.DelTrack(job.Uid, job.Pid, job.Type, true)
 }
 
 func freePkgSpace(job *pkg_model.Job) {
