@@ -56,3 +56,10 @@ func MapCache(tables []interface{}) {
 		Engine.MapCacher(t, Cache)
 	}
 }
+
+func SessionRelease(sess *xorm.Session) {
+	if !sess.IsCommitedOrRollbacked {
+		sess.Rollback()
+	}
+	sess.Close()
+}
