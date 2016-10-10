@@ -26,10 +26,8 @@ type TaskScheduler interface {
 	DownloadScheduler
 }
 
-// 调度单元, node or zone
-type ScheduleUnit interface {
-	// Id() string
-	FreeStorage() uint64
-	UploadScheduler
-	DownloadScheduler
-}
+// 调度单元
+type ScheduleUnit interface{}
+
+//调度单元过滤器
+type ScheduleUnitFilter func(u ScheduleUnit, args ...interface{}) bool

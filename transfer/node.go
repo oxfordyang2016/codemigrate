@@ -523,3 +523,12 @@ func (self *Node) AddTaskCnt(typ int, v int) {
 		*cnt = 0
 	}
 }
+
+// implement ScheduleUnit
+func (self *Node) FreeStorage() uint64 {
+	return self.Info.FreeStorage
+}
+
+func (self *Node) GetNode() *Node {
+	return self
+}
