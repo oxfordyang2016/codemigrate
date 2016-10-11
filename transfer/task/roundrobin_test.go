@@ -1,7 +1,6 @@
 package task
 
 import (
-	trans "./../"
 	. "github.com/smartystreets/goconvey/convey"
 	"testing"
 )

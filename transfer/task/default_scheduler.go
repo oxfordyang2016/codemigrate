@@ -14,7 +14,7 @@ type DefaultScheduler struct {
 	u_restrict *RestrictUploadScheduler
 	u_proxy    UploadScheduler
 	d_file     *FileDownloadScheduler
-	d_nas      *NasDownloadScheduler
+	d_nas      *NasRoundRobinScheduler
 }
 
 func NewDefaultScheduler(restrict_mode int) *DefaultScheduler {
@@ -23,9 +23,10 @@ func NewDefaultScheduler(restrict_mode int) *DefaultScheduler {
 	n.u_proxy = rr
 	n.u_restrict = NewRestrictUploadScheduler(restrict_mode)
 	n.d_file = NewFileDownloadScheduler()
-	n.d_nas = NewNasDownloadScheduler()
+	n.d_nas = NewNasRoundRobinScheduler()
 
 	trans.NodeMgr.AddObserver(rr)
+	trans.NodeMgr.AddObserver(n.d_nas)
 	TaskMgr.AddObserver(n.u_restrict)
 	return n
 }

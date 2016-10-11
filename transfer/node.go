@@ -49,6 +49,7 @@ type NodeObserver interface {
 	AddNode(n *Node)
 	UpdateNode(n *Node, req *transfer.KeepaliveReq)
 	DelNode(n *Node)
+	NodeZoneChange(n *Node, old_zid, new_zid string)
 }
 
 // TransferNode管理
@@ -82,6 +83,7 @@ func (self *NodeManager) GetByNid(id string) *Node {
 
 func (self *NodeManager) AddNode(node *Node) {
 	clog.Infof("Node Add: %+v", node)
+	node.mgr = self
 	self.mux.Lock()
 	defer self.mux.Unlock()
 	n := self.id_map[node.Nid]
@@ -117,6 +119,14 @@ func (self *NodeManager) AddObserver(observer NodeObserver) {
 	self.observers = append(self.observers, observer)
 }
 
+func (self *NodeManager) NodeZoneChange(n *Node, old_zid, new_zid string) {
+	self.mux.Lock()
+	defer self.mux.Unlock()
+	for _, o := range self.observers {
+		o.NodeZoneChange(n, old_zid, new_zid)
+	}
+}
+
 func (self *NodeManager) WalkNodes(walk_fun func(n *Node)) {
 	if walk_fun == nil {
 		return
@@ -126,6 +136,25 @@ func (self *NodeManager) WalkNodes(walk_fun func(n *Node)) {
 	for _, node := range self.id_map {
 		walk_fun(node)
 	}
+}
+
+// Node需要重新reload数据库的信息,再做处理, 例如zone的改动
+func (self *NodeManager) ReloadNodeModel(all bool, nid_list []string) error {
+	if !all {
+		for _, nid := range nid_list {
+			node := self.GetByNid(nid)
+			if node != nil {
+				node.ReloadModel()
+			}
+		}
+		return nil
+	}
+
+	// all nodes
+	self.WalkNodes(func(n *Node) {
+		n.ReloadModel()
+	})
+	return nil
 }
 
 type NodeInfo struct {
@@ -161,7 +190,7 @@ func NewTimeMessage(msg *transfer.Message) *TimeMessage {
 type Node struct {
 	Nid    string
 	ZoneId string
-	model  *models.Node
+	// model  *models.Node
 
 	// 运行时数据
 	Host  string
@@ -181,6 +210,7 @@ type Node struct {
 	server      *WSServer
 	closed      bool
 	remote_addr string
+	mgr         *NodeManager
 }
 
 func NewNode(ws *websocket.Conn, server *WSServer) *Node {
@@ -216,8 +246,11 @@ func (self *Node) Update(update_login_time bool) {
 		t := time.Now().Add(time.Duration(self.server.config.KeepaliveInterval) * time.Second * 3)
 		self.ws.SetDeadline(t)
 	}
-	if update_login_time && self.model != nil {
-		self.model.UpdateLoginTime(time.Now())
+	if update_login_time {
+		model, _ := models.GetNode(self.Nid)
+		if model != nil {
+			model.UpdateLoginTime(time.Now())
+		}
 	}
 }
 
@@ -254,7 +287,11 @@ func (self *Node) HandleMsg(msg *transfer.Message) (rsp *transfer.Message, err e
 		self.rsp_lock.Lock()
 		self.rsp_msgs[msg.Seq] = NewTimeMessage(msg)
 		self.rsp_lock.Unlock()
-		self.rsp_sem <- 1
+		// issue-43
+		select {
+		case self.rsp_sem <- 1:
+		default:
+		}
 	}
 	return
 }
@@ -278,9 +315,9 @@ func (self *Node) handleRegister(msg, rsp *transfer.Message) (err error) {
 	return
 }
 
-func (self *Node) IsRegisted() bool {
-	return self.model != nil
-}
+// func (self *Node) IsRegisted() bool {
+// 	return self.model != nil
+// }
 
 func (self *Node) IsLogined() bool {
 	return self.Token != ""
@@ -300,10 +337,11 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 	// 	// node with same nid is logined, and should kickout
 	// 	n.Close(true)
 	// }
-	if self.model, err = models.GetNode(nid); err != nil {
+	var model *models.Node
+	if model, err = models.GetNode(nid); err != nil {
 		return
 	}
-	if self.model == nil {
+	if model == nil {
 		err = fmt.Errorf("%s is not registed", nid)
 		rsp.Rsp.Code = cydex.ErrInvalidParam
 		rsp.Rsp.Reason = err.Error()
@@ -311,7 +349,7 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 	}
 
 	self.Nid = nid
-	self.ZoneId = self.model.ZoneId
+	self.ZoneId = model.ZoneId
 	self.Token = uuid.New()
 	self.Info.Version = msg.Req.Login.Version
 	self.Info.F2tpVersion = msg.Req.Login.F2tpVersion
@@ -329,11 +367,11 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 	self.login_at = time.Now()
 	self.Update(true)
 
-	if self.model.RxBandwidth != msg.Req.Login.RxBandwidth {
-		self.model.SetRxBandwidth(msg.Req.Login.RxBandwidth)
+	if model.RxBandwidth != msg.Req.Login.RxBandwidth {
+		model.SetRxBandwidth(msg.Req.Login.RxBandwidth)
 	}
-	if self.model.TxBandwidth != msg.Req.Login.TxBandwidth {
-		self.model.SetTxBandwidth(msg.Req.Login.TxBandwidth)
+	if model.TxBandwidth != msg.Req.Login.TxBandwidth {
+		model.SetTxBandwidth(msg.Req.Login.TxBandwidth)
 	}
 
 	NodeMgr.AddNode(self)
@@ -399,10 +437,9 @@ func (self *Node) handleTransferNotify(msg, rsp *transfer.Message) (err error) {
 		return
 	}
 
-	NodeMgr.StateChan <- msg.Req.TransferNotify.TaskStateList
-	// for _, r := range msg.Req.TransferNotify.TaskStateList {
-	// 	NodeMgr.StateChan <- r
-	// }
+	if self.mgr != nil {
+		self.mgr.StateChan <- msg.Req.TransferNotify.TaskStateList
+	}
 
 	return
 }
@@ -481,11 +518,16 @@ func (self *Node) Close(del_from_mgr bool) {
 	}
 	self.lock.Unlock()
 
-	if self.model != nil {
-		self.model.UpdateLogoutTime(time.Now())
+	if models.DB() != nil {
+		model, _ := models.GetNode(self.Nid)
+		if model != nil {
+			model.UpdateLogoutTime(time.Now())
+		}
 	}
 	if del_from_mgr {
-		NodeMgr.DelNode(self.Nid)
+		if self.mgr != nil {
+			self.mgr.DelNode(self.Nid)
+		}
 	}
 }
 
@@ -524,11 +566,72 @@ func (self *Node) AddTaskCnt(typ int, v int) {
 	}
 }
 
-// implement ScheduleUnit
-func (self *Node) FreeStorage() uint64 {
-	return self.Info.FreeStorage
+func (self *Node) ReloadModel() error {
+	model, err := models.GetNode(self.Nid)
+	if err != nil {
+		return err
+	}
+	new_zid := model.ZoneId
+	if new_zid != self.ZoneId {
+		clog.Infof("update node zoneid: %s ('%s' -> '%s')", self, self.ZoneId, new_zid)
+		if self.mgr != nil {
+			self.mgr.NodeZoneChange(self, self.ZoneId, new_zid)
+		}
+		self.ZoneId = new_zid
+		// notify remote node
+		go func() {
+			msg := transfer.NewReqMessage("", "config", "", 0)
+			msg.Req.Config = &transfer.ConfigReq{
+				ZoneId: &new_zid,
+			}
+			_, err := self.SendRequestSync(msg, 5*time.Second)
+			if err != nil {
+				clog.Error(err)
+			}
+		}()
+	}
+	return nil
 }
 
-func (self *Node) GetNode() *Node {
-	return self
+// 无zone的node的storage累加
+// 同一个zone的nodes,理论上nodes的total应该是一致的,free取最小的那个
+// 多zone再累加
+func CalcStorage() (total, free uint64) {
+	NodeMgr.WalkNodes(func(n *Node) {
+		if n.ZoneId == "" {
+			total += n.Info.TotalStorage
+			free += n.Info.FreeStorage
+		}
+	})
+	zones, _ := models.GetZones(nil)
+	for _, zone := range zones {
+		t, f := calcZoneStorage(zone.Zid)
+		total += t
+		free += f
+	}
+	return
+}
+
+func calcZoneStorage(zid string) (total, free uint64) {
+	nid_list, _ := models.GetNidsByZone(zid)
+	var total_max, free_min uint64
+	for _, nid := range nid_list {
+		node := NodeMgr.GetByNid(nid)
+		if node == nil {
+			continue
+		}
+		if node.Info.TotalStorage > total_max {
+			total_max = node.Info.TotalStorage
+		}
+		if free_min == 0 {
+			free_min = node.Info.FreeStorage
+		} else {
+			if node.Info.FreeStorage > 0 && node.Info.FreeStorage < free_min {
+				free_min = node.Info.FreeStorage
+			}
+		}
+	}
+	total = total_max
+	free = free_min
+	return
 }
