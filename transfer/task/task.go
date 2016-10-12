@@ -3,6 +3,7 @@ package task
 import (
 	trans "./.."
 	"./../../utils/cache"
+	"./../models"
 	"crypto/rand"
 	"cydex"
 	"cydex/transfer"
@@ -229,19 +230,29 @@ func (self *TaskManager) DelObserver(id uint32) {
 }
 
 func (self *TaskManager) AddTask(t *Task) {
-	// delete timeouted task
-	// for _, t := range self.tasks {
-	// 	if time.Since(t.UpdateAt) > TASK_TIMEOUT {
-	// 		self.DelTask(t.TaskId)
-	// 	}
-	// }
+
 	if err := SaveTaskToCache(t, self.cache_timeout); err != nil {
 		clog.Error("save task %s cache failed", t)
 	}
 
+	var zoneid string
 	node := trans.NodeMgr.GetByNid(t.Nid)
 	if node != nil {
+		zoneid = node.ZoneId
 		node.AddTaskCnt(t.Type, 1)
+	}
+
+	// issue-44: save task scheduler record
+	if models.DB() != nil {
+		models.CreateTask(&models.Task{
+			TaskId:  t.TaskId,
+			Type:    t.Type,
+			NodeId:  t.Nid,
+			ZoneId:  zoneid,
+			JobId:   t.JobId,
+			Fid:     t.Fid,
+			NumSegs: t.NumSeg,
+		})
 	}
 
 	self.lock.Lock()
