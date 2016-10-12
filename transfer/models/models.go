@@ -7,7 +7,7 @@ import (
 
 var (
 	Tables []interface{} = []interface{}{
-		new(Node), new(Zone),
+		new(Node), new(Zone), new(Task),
 	}
 	Caches []interface{} = []interface{}{}
 )
