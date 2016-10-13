@@ -32,6 +32,8 @@ func (o *MyObserver) DelNode(n *Node) {
 }
 func (o *MyObserver) UpdateNode(n *Node, req *transfer.KeepaliveReq) {
 }
+func (o *MyObserver) NodeZoneChange(n *Node, old_zid, new_zid string) {
+}
 
 // func testNodeHandleRsp(node *Node, msg *transfer.Message) {
 // 	_, _ := node.HandleMsg(msg)

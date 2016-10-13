@@ -1,10 +1,12 @@
 package controllers
 
 import (
+	trans "./../../transfer"
 	"./../../transfer/models"
 	"cydex"
 	// "cydex/transfer"
-	clog "github.com/cihub/seelog"
+	// clog "github.com/cihub/seelog"
+	// "fmt"
 	"github.com/pborman/uuid"
 )
 
@@ -65,8 +67,7 @@ func (self *ZonesController) Post() {
 		self.ServeJSON()
 	}()
 
-	if self.UserLevel == cydex.USER_LEVEL_ADMIN {
-		clog.Error("admin not allowed to create pkg")
+	if self.UserLevel != cydex.USER_LEVEL_ADMIN {
 		rsp.Error = cydex.ErrNotAllowed
 		return
 	}
@@ -125,8 +126,8 @@ func (self *ZoneController) Put() {
 }
 
 func (self *ZoneController) Patch() {
-	req := new(cydex.Zone)
-	rsp := new(cydex.BaseRsp)
+	req := new(cydex.ZoneModify)
+	rsp := new(cydex.ZoneRsp)
 	rsp.Error = cydex.OK
 
 	defer func() {
@@ -145,10 +146,6 @@ func (self *ZoneController) Patch() {
 		rsp.Error = cydex.ErrInvalidParam
 		return
 	}
-	if req.Name == "" {
-		rsp.Error = cydex.ErrInvalidParam
-		return
-	}
 
 	zone_m, _ := models.GetZone(zid)
 	if zone_m == nil {
@@ -156,9 +153,14 @@ func (self *ZoneController) Patch() {
 		return
 	}
 
-	if err := zone_m.SetName(req.Name); err != nil {
-		rsp.Error = cydex.ErrInnerServer
-		return
+	if req.Name != nil {
+		name := *req.Name
+		if name != "" {
+			if err := zone_m.SetName(name); err != nil {
+				rsp.Error = cydex.ErrInnerServer
+				return
+			}
+		}
 	}
 	if req.Desc != nil {
 		if err := zone_m.SetDesc(*req.Desc); err != nil {
@@ -166,10 +168,18 @@ func (self *ZoneController) Patch() {
 			return
 		}
 	}
+
+	zone_m, _ = models.GetZone(zid)
+	rsp.Zone = getSignalZone(zone_m)
 }
 
 func (self *ZoneController) Delete() {
 	rsp := new(cydex.BaseRsp)
+
+	defer func() {
+		self.Data["json"] = rsp
+		self.ServeJSON()
+	}()
 
 	if self.UserLevel != cydex.USER_LEVEL_ADMIN {
 		rsp.Error = cydex.ErrNotAllowed
@@ -177,10 +187,12 @@ func (self *ZoneController) Delete() {
 	}
 
 	zid := self.GetString(":id")
+	nid_list, _ := models.GetNidsByZone(zid)
 	if err := models.DeleteZone(zid); err != nil {
 		rsp.Error = cydex.ErrInnerServer
 		return
 	}
+	trans.NodeMgr.ReloadNodeModel(false, nid_list)
 	return
 }
 
@@ -223,6 +235,10 @@ func (self *ZoneNodesController) Put() {
 		rsp.Error = cydex.ErrInnerServer
 		return
 	}
+	var nid_list []string
+	nid_list = append(nid_list, req.AddList...)
+	nid_list = append(nid_list, req.DelList...)
+	trans.NodeMgr.ReloadNodeModel(false, nid_list)
 }
 
 func (self *ZoneNodesController) Delete() {
@@ -245,17 +261,24 @@ func (self *ZoneNodesController) Delete() {
 		rsp.Error = cydex.ErrInvalidParam
 		return
 	}
+	nid_list, _ := models.GetNidsByZone(zid)
 	if err := zone_m.ClearNodes(); err != nil {
 		rsp.Error = cydex.ErrInnerServer
 		return
 	}
+	trans.NodeMgr.ReloadNodeModel(false, nid_list)
 }
 
 func getSignalZone(zone_m *models.Zone) *cydex.Zone {
+	if zone_m == nil {
+		return nil
+	}
 	zone := new(cydex.Zone)
 
 	zone.Id = zone_m.Zid
 	zone.Name = zone_m.Name
 	zone.Desc = &zone_m.Desc
+	nid_list, _ := models.GetNidsByZone(zone_m.Zid)
+	zone.NodeList = nid_list
 	return zone
 }

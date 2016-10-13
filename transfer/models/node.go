@@ -80,6 +80,32 @@ func GetNodes(p *cydex.Pagination) ([]*Node, error) {
 	return nodes, nil
 }
 
+func GetNidsByZone(zid string) ([]string, error) {
+	node := new(Node)
+	rows, err := DB().Where("zone_id=?", zid).Rows(node)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var nid_list []string
+	for rows.Next() {
+		if err = rows.Scan(node); err != nil {
+			return nil, err
+		}
+		nid_list = append(nid_list, node.Nid)
+	}
+	return nid_list, nil
+}
+
+func GetNodesByZone(zid string) ([]*Node, error) {
+	nodes := make([]*Node, 0)
+	if err := DB().Where("zone_id=?", zid).Find(&nodes); err != nil {
+		return nil, err
+	}
+	return nodes, nil
+}
+
 func (n *Node) SetName(name string) error {
 	n.Name = name
 	_, err := DB().Id(n.Id).Cols("name").Update(n)

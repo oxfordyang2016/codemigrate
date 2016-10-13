@@ -24,3 +24,7 @@ func CreateTask(t *Task) error {
 	}
 	return nil
 }
+
+func (self *Task) TableName() string {
+	return "transfer_task"
+}
