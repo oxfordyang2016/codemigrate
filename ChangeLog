@@ -1,4 +1,5 @@
 	* 解决SendRequestSync()等待消息的问题, ref transfer_service(issue-45)
+	* 删除被暂停的包裹, ref issue-46
 
 2016-10-08 v0.0.1-alpha2 zh.jin <zh.jin@catontechnology.com>
 	* 增加统计接口

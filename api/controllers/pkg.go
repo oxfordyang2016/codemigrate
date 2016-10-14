@@ -850,20 +850,24 @@ func (self *PkgController) Delete() {
 	}
 
 	// 是否在传输
-	ret, err := isJobTransferring(job_m)
-	if err != nil {
-		rsp.Error = cydex.ErrInnerServer
-		return
-	}
-	if ret {
-		rsp.Error = cydex.ErrActivePackage
-		return
-	}
+	// ret, err := isJobTransferring(job_m)
+	// if err != nil {
+	// 	rsp.Error = cydex.ErrInnerServer
+	// 	return
+	// }
+	// if ret {
+	// 	rsp.Error = cydex.ErrActivePackage
+	// 	return
+	// }
+
+	// 停止传输任务
+	task.TaskMgr.StopTasks(job_m.JobId)
 
 	deleteJob(job_m)
 	go freePkgSpace(job_m)
 }
 
+// 删除上传任务
 func deleteJob(job *pkg_model.Job) {
 	if job == nil {
 		return
