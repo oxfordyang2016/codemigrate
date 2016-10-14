@@ -175,14 +175,15 @@ type NodeInfo struct {
 	DownloadTaskCnt int
 }
 
-type TimeMessage struct {
+type PendingReq struct {
 	*transfer.Message
-	ts time.Time
+	rsp     *transfer.Message
+	rsp_sem chan int
 }
 
-func NewTimeMessage(msg *transfer.Message) *TimeMessage {
-	return &TimeMessage{
-		msg, time.Now(),
+func NewPendingReq(req *transfer.Message) *PendingReq {
+	return &PendingReq{
+		req, nil, make(chan int, 1),
 	}
 }
 
@@ -199,26 +200,23 @@ type Node struct {
 
 	// private
 	// alive_interval uint32
-	login_at time.Time
-	ws       *websocket.Conn
-	lock     sync.Mutex
-	seq      uint32
-	// rsp_chan chan *TimeMessage
-	rsp_sem     chan int
-	rsp_lock    sync.Mutex
-	rsp_msgs    map[uint32]*TimeMessage
-	server      *WSServer
-	closed      bool
-	remote_addr string
-	mgr         *NodeManager
+	login_at     time.Time
+	ws           *websocket.Conn
+	lock         sync.Mutex
+	seq          uint32
+	req_lock     sync.Mutex
+	pending_reqs map[uint32]*PendingReq
+	server       *WSServer
+	closed       bool
+	remote_addr  string
+	mgr          *NodeManager
 }
 
 func NewNode(ws *websocket.Conn, server *WSServer) *Node {
 	n := new(Node)
 	n.server = server
 	n.SetWSConn(ws)
-	n.rsp_sem = make(chan int)
-	n.rsp_msgs = make(map[uint32]*TimeMessage)
+	n.pending_reqs = make(map[uint32]*PendingReq)
 	return n
 }
 
@@ -258,11 +256,6 @@ func (self *Node) HandleMsg(msg *transfer.Message) (rsp *transfer.Message, err e
 	if msg.IsReq() {
 		rsp = msg.BuildRsp()
 		rsp.Rsp.Code = cydex.OK
-		// if msg == nil {
-		// 	rsp.Rsp.Code = cydex.ErrInvalidParam
-		// 	rsp.Rsp.Reason = "Invalid Param"
-		// 	return
-		// }
 	}
 
 	lower_cmd := strings.ToLower(msg.Cmd)
@@ -284,14 +277,12 @@ func (self *Node) HandleMsg(msg *transfer.Message) (rsp *transfer.Message, err e
 			self.Update(false)
 		}
 	} else {
-		self.rsp_lock.Lock()
-		self.rsp_msgs[msg.Seq] = NewTimeMessage(msg)
-		self.rsp_lock.Unlock()
-		// issue-43
-		select {
-		case self.rsp_sem <- 1:
-		default:
+		self.req_lock.Lock()
+		if req, _ := self.pending_reqs[msg.Seq]; req != nil {
+			req.rsp = msg
+			req.rsp_sem <- 1
 		}
+		self.req_lock.Unlock()
 	}
 	return
 }
@@ -448,6 +439,13 @@ func (self *Node) SendRequest(msg *transfer.Message) error {
 	if !msg.IsReq() {
 		return errors.New("msg is not request")
 	}
+
+	self.req_lock.Lock()
+	msg.Seq = self.seq
+	self.pending_reqs[msg.Seq] = NewPendingReq(msg)
+	self.seq++
+	self.req_lock.Unlock()
+
 	return self.SendMessage(msg)
 }
 
@@ -458,10 +456,6 @@ func (self *Node) SendMessage(msg *transfer.Message) error {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
-	if msg.IsReq() {
-		msg.Seq = self.seq
-		self.seq++
-	}
 	if self.closed {
 		return fmt.Errorf("%s send msg failed because closed", self)
 	}
@@ -478,41 +472,45 @@ func (self *Node) SendRequestSync(msg *transfer.Message, timeout time.Duration) 
 		return
 	}
 
+	var pending_req *PendingReq
+	self.req_lock.Lock()
+	pending_req = self.pending_reqs[msg.Seq]
+	self.req_lock.Unlock()
+	if pending_req == nil {
+		err = fmt.Errorf("%s can't get pending req, it's impossible!", self)
+		return nil, err
+	}
+
 	var alive bool
 
 	select {
-	case _, alive = <-self.rsp_sem:
+	case _, alive = <-pending_req.rsp_sem:
 		if !alive {
-			err = fmt.Errorf("%s rsp_sem closed, maybe disconnected")
+			err = fmt.Errorf("%s rsp_sem closed, maybe disconnected", self)
 			return nil, err
 		}
-
-		self.rsp_lock.Lock()
-		defer self.rsp_lock.Unlock()
-		time_msg, _ := self.rsp_msgs[msg.Seq]
-		if time_msg != nil && time_msg.Message != nil {
-			rsp = time_msg.Message
-		}
-		delete(self.rsp_msgs, msg.Seq)
-
-		// 删除超时的响应消息
-		for _, m := range self.rsp_msgs {
-			if time.Since(m.ts) >= MESSAGE_TIMEOUT {
-				delete(self.rsp_msgs, m.Seq)
-			}
-		}
+		rsp = pending_req.rsp
 	case <-time.After(timeout):
 		err = fmt.Errorf("%s msg %s wait rsp timeout", self, msg.Cmd)
 	}
+
+	// jzh: 最后要clear该msg
+	self.req_lock.Lock()
+	delete(self.pending_reqs, msg.Seq)
+	self.req_lock.Unlock()
+
 	return
 }
 
 func (self *Node) Close(del_from_mgr bool) {
+	self.req_lock.Lock()
+	for _, req := range self.pending_reqs {
+		close(req.rsp_sem)
+	}
+	self.req_lock.Unlock()
+
 	self.lock.Lock()
 	self.closed = true
-	if self.rsp_sem != nil {
-		close(self.rsp_sem)
-	}
 	if self.ws != nil {
 		self.ws.Close()
 	}

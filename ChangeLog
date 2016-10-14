@@ -1,3 +1,5 @@
+	* 解决SendRequestSync()等待消息的问题, ref transfer_service(issue-45)
+
 2016-10-08 v0.0.1-alpha2 zh.jin <zh.jin@catontechnology.com>
 	* 增加统计接口
 	* 修正删除无下载者的包裹,仍保留track的问题, issue-37
