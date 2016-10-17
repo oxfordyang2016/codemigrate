@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -17,6 +18,7 @@ type File struct {
 	PathAbs    string    `xorm:"TEXT"`
 	NumSegs    int       `xorm:"not null"`
 	Storage    string    `xorm:"varchar(255)"`
+	Flag       int       `xorm:'Int default(0)'`
 	CreateAt   time.Time `xorm:"DateTime created"`
 	UpdatedAt  time.Time `xorm:"Datetime updated"`
 	Pkg        *Pkg      `xorm:"-"`
@@ -84,4 +86,8 @@ func (self *File) SetStorage(storage string) error {
 	self.Storage = storage
 	_, err := DB().Id(self.Id).Cols("storage").Update(self)
 	return err
+}
+
+func (self *File) String() string {
+	return fmt.Sprintf("<File(%s %s)>", self.Fid, self.Name)
 }

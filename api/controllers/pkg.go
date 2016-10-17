@@ -668,6 +668,7 @@ func (self *PkgsController) createPkg(req *cydex.CreatePkgReq, rsp *cydex.Create
 			PathAbs:    f.PathAbs,
 			EigenValue: f.Chara,
 			NumSegs:    len(segs),
+			Flag:       cydex.FILE_FLAG_NO_SLICE, //TODO
 		}
 		if _, err = session.Insert(file_m); err != nil {
 			rsp.Error = cydex.ErrInnerServer
