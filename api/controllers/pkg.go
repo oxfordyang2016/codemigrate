@@ -623,6 +623,11 @@ func (self *PkgsController) createPkg(req *cydex.CreatePkgReq, rsp *cydex.Create
 		rsp.Error = cydex.ErrInnerServer
 		return
 	}
+	// 分片与否确定file flag
+	file_flag := 0
+	if !pkg.IsUsingFileSlice() {
+		file_flag = file_flag | cydex.FILE_FLAG_NO_SLICE
+	}
 
 	// pkg_o := new(cydex.Pkg)
 	pid = unpacker.GeneratePid(uid, req.Title, req.Notes)
@@ -668,7 +673,7 @@ func (self *PkgsController) createPkg(req *cydex.CreatePkgReq, rsp *cydex.Create
 			PathAbs:    f.PathAbs,
 			EigenValue: f.Chara,
 			NumSegs:    len(segs),
-			Flag:       cydex.FILE_FLAG_NO_SLICE, //TODO
+			Flag:       file_flag,
 		}
 		if _, err = session.Insert(file_m); err != nil {
 			rsp.Error = cydex.ErrInnerServer
@@ -914,6 +919,7 @@ func freePkgSpace(job *pkg_model.Job) {
 			if file.Size == 0 {
 				return
 			}
+			detail := getFileDetail(file)
 			task_req := buildTaskDownloadReq(job.Uid, pid, file.Fid, nil)
 			clog.Tracef("%+v", task_req)
 			node, err := task.TaskMgr.Scheduler().DispatchDownload(task_req)
@@ -926,6 +932,7 @@ func freePkgSpace(job *pkg_model.Job) {
 					Pid:         pid,
 					Fid:         file.Fid,
 					FileStorage: task_req.DownloadTaskReq.FileStorage,
+					FileDetail:  detail,
 				}
 				clog.Tracef("%+v", msg.Req.RemoveFile)
 				if _, err = node.SendRequestSync(msg, timeout); err != nil {

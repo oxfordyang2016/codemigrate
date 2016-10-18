@@ -81,7 +81,7 @@ func (self *TransferController) Post() {
 func buildTaskDownloadReq(uid, pid, fid string, sids []string) *task.DownloadReq {
 	file_m, _ := pkg_model.GetFile(fid)
 	detail := getFileDetail(file_m)
-	if file_m.Flag != 0 && detail == nil {
+	if cydex.IsFileNoSlice(file_m.Flag) && detail == nil {
 		clog.Errorf("%s flag is %d, detail shouldn't be nil", file_m, file_m.Flag)
 		return nil
 	}
@@ -214,7 +214,7 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 	}
 	transferd_size, _ := job_m.GetTransferedSize()
 	detail := getFileDetail(file_m)
-	if file_m.Flag != 0 && detail == nil {
+	if cydex.IsFileNoSlice(file_m.Flag) && detail == nil {
 		clog.Errorf("%s flag is %d, detail shouldn't be nil", file_m, file_m.Flag)
 		rsp.Error = cydex.ErrInnerServer
 	}
@@ -312,15 +312,18 @@ func getFileDetail(file *pkg_model.File) *transfer.FileDetail {
 	detail := &transfer.FileDetail{
 		FileName:       file.Name,
 		FileFlag:       file.Flag,
+		FileMode:       uint32(file.Mode),
 		EncryptionType: p.EncryptionType,
 	}
 	if p.MetaData != nil {
 		detail.MtuSize = p.MetaData.MtuSize
 	}
-	offset := uint64(0)
-	for _, s := range segs {
-		detail.SegsOffset = append(detail.SegsOffset, offset)
-		offset += s.Size
-	}
+	seg := segs[0]
+	detail.SegPerSize = seg.Size
+	s := string(seg.Sid[len(seg.Sid)-1])
+	detail.SegStartNo, _ = strconv.Atoi(s)
+
+	clog.Debugf("%+v", detail)
+
 	return detail
 }
