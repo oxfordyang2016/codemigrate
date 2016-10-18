@@ -7,9 +7,12 @@ import (
 	// "cydex/transfer"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 )
 
+var lock sync.Mutex
+var use_file_slice bool
 var unpacker Unpacker
 
 // 拆包器接口
@@ -98,4 +101,16 @@ func SetUnpacker(u Unpacker) {
 	if u != nil {
 		unpacker = u
 	}
+}
+
+func IsUsingFileSlice() bool {
+	lock.Lock()
+	defer lock.Unlock()
+	return use_file_slice
+}
+
+func SetUsingFileSlice(enable bool) {
+	lock.Lock()
+	defer lock.Unlock()
+	use_file_slice = enable
 }

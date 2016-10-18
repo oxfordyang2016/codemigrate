@@ -140,6 +140,8 @@ func setupPkg(cfg *ini.File) (err error) {
 		return err
 	}
 
+	pkg.SetUsingFileSlice(sec.Key("file_slice").MustBool(true))
+
 	var unpacker pkg.Unpacker
 	unpacker_str := sec.Key("unpacker").MustString("default")
 	clog.Infof("[setup pkg] unpacker: %s", unpacker_str)
