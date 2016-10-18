@@ -10,6 +10,7 @@ import (
 	trans "./transfer"
 	trans_model "./transfer/models"
 	"./transfer/task"
+	"./utils"
 	"./utils/cache"
 	"./utils/db"
 	"fmt"
@@ -21,6 +22,11 @@ import (
 
 const (
 	VERSION = "0.1.0-preview2"
+)
+
+const (
+	PROFILE = "/opt/cydex/etc/ts.d/profile.ini"
+	CFGFILE = "/opt/cydex/config/ts.ini"
 )
 
 var (
@@ -152,7 +158,7 @@ func setupPkg(cfg *ini.File) (err error) {
 		if err != nil {
 			return err
 		}
-		min_seg_size := ConfigGetSize(sec_unpacker.Key("min_seg_size").String())
+		min_seg_size := utils.ConfigGetSize(sec_unpacker.Key("min_seg_size").String())
 		if min_seg_size == 0 {
 			err = fmt.Errorf("Invalid min_seg_size:%d", min_seg_size)
 			return err
@@ -279,7 +285,9 @@ func main() {
 	initLog()
 	clog.Infof("Start cydex transfer service, version:%s", VERSION)
 
-	cfg, err := LoadConfig()
+	config := utils.NewConfig(PROFILE, CFGFILE)
+	utils.MakeDefaultConfig(config)
+	cfg, err := config.Load()
 	if err != nil {
 		clog.Critical(err)
 		return

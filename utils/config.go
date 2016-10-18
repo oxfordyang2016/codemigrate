@@ -1,4 +1,4 @@
-package main
+package utils
 
 import (
 	"fmt"
@@ -10,22 +10,31 @@ import (
 
 const (
 	CFG_SEP = ","
-	PROFILE = "/opt/cydex/etc/ts.d/profile.ini"
-	CFGFILE = "/opt/cydex/config/ts.ini"
 )
 
 var (
 	SizeStrPostfix = []string{"k", "m", "g"}
 	SizeUnits      = []uint64{1024, 1024 * 1024, 1024 * 1024 * 1024}
+	config         *Config
 )
 
-var seps = []string{"k", "m", "g"}
+type Config struct {
+	profile string
+	cfgfile string
+}
 
-func LoadConfig() (*ini.File, error) {
-	if err := syscall.Access(PROFILE, syscall.F_OK); err != nil {
-		return nil, fmt.Errorf("%s: %s", err.Error(), PROFILE)
+func NewConfig(profile, cfgfile string) *Config {
+	o := &Config{
+		profile, cfgfile,
 	}
-	return ini.LooseLoad(PROFILE, CFGFILE)
+	return o
+}
+
+func (self *Config) Load() (*ini.File, error) {
+	if err := syscall.Access(self.profile, syscall.F_OK); err != nil {
+		return nil, fmt.Errorf("%s: %s", err.Error(), self.profile)
+	}
+	return ini.LooseLoad(self.profile, self.cfgfile)
 }
 
 // sizestr, 例如100, 100K/k, 100M/m, 100G/g等
@@ -56,4 +65,14 @@ func ConfigGetSize(sizestr string) uint64 {
 		n = n * SizeUnits[sep_idx]
 	}
 	return n
+}
+
+func MakeDefaultConfig(cfg *Config) {
+	if cfg != nil {
+		config = cfg
+	}
+}
+
+func DefaultConfig() *Config {
+	return config
 }

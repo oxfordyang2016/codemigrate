@@ -618,16 +618,19 @@ func (self *PkgsController) createPkg(req *cydex.CreatePkgReq, rsp *cydex.Create
 		session.Close()
 	}()
 
-	unpacker := pkg.GetUnpacker()
-	if unpacker == nil {
-		rsp.Error = cydex.ErrInnerServer
-		return
-	}
 	// 分片与否确定file flag
 	file_flag := 0
 	if !pkg.IsUsingFileSlice() {
 		file_flag = file_flag | cydex.FILE_FLAG_NO_SLICE
 	}
+
+	unpacker := pkg.GetUnpacker()
+	if unpacker == nil {
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	unpacker.Enter()
+	defer unpacker.Leave()
 
 	// pkg_o := new(cydex.Pkg)
 	pid = unpacker.GeneratePid(uid, req.Title, req.Notes)
