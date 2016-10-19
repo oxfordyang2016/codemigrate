@@ -224,12 +224,13 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 	task_req.FileSize = file_m.Size
 	task_req.LeftPkgSize = pkg_m.Size - transferd_size
 	task_req.UploadTaskReq = &transfer.UploadTaskReq{
-		TaskId:     task.GenerateTaskId(),
-		Uid:        uid,
-		Pid:        pid,
-		Fid:        req.Fid,
-		SidList:    req.SegIds,
-		FileDetail: detail,
+		TaskId:      task.GenerateTaskId(),
+		Uid:         uid,
+		Pid:         pid,
+		Fid:         req.Fid,
+		SidList:     req.SegIds,
+		FileDetail:  detail,
+		FileStorage: file_m.Storage, //issue-31,48
 	}
 	for _, sid := range req.SegIds {
 		seg, _ := pkg_model.GetSeg(sid)
@@ -237,7 +238,6 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 			task_req.UploadTaskReq.Size += seg.Size
 		}
 	}
-	task_req.FileStorage = file_m.Storage
 
 	clog.Tracef("upload req: %+v", task_req)
 
@@ -255,7 +255,13 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 
 	task_rsp := trans_rsp.Rsp.UploadTask
 	// update storage
-	file_m.SetStorage(task_rsp.FileStorage)
+	if file_m.Storage == "" {
+		file_m.SetStorage(task_rsp.FileStorage)
+	} else {
+		if file_m.Storage != task_rsp.FileStorage {
+			clog.Warnf("File's storage url:'%s' is different from the node provides '%s'", file_m.Storage, task_rsp.FileStorage)
+		}
+	}
 
 	rsp.Host = getHost(node)
 	rsp.Port = task_rsp.Port

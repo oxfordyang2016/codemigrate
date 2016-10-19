@@ -1,3 +1,6 @@
+2016-10-19 v0.1.0-preview3 zh.jin <zh.jin@catontechnology.com>
+	* issue-48, 修复分片被存储到不同分区上的问题,上传也要带storage url参数
+
 2016-10-14 v0.1.0-preview2 zh.jin <zh.jin@catontechnology.com>
 	* 增加zone调度
 	* 解决SendRequestSync()等待消息的问题, ref transfer_service(issue-45)

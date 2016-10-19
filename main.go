@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	VERSION = "0.1.0-preview2"
+	VERSION = "0.1.0-preview3"
 )
 
 const (

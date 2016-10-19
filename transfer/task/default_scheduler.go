@@ -45,13 +45,14 @@ func (self *DefaultScheduler) DispatchUpload(req *UploadReq) (n *trans.Node, err
 	if n != nil {
 		return
 	}
+	file_storage := req.UploadTaskReq.FileStorage
 	// issue-31, 有文件存储路径,说明文件分片已经有上传过了
-	if req.FileStorage != "" {
+	if file_storage != "" {
 		// 已有分片被上传过了,分片上传约束调度器没找到对应的node,要找到原有的node.
 		clog.Warnf("segs of file(%s) were uploaded", req.Fid)
 		req2 := new(DownloadReq)
 		req2.DownloadTaskReq = &transfer.DownloadTaskReq{
-			FileStorage: req.FileStorage,
+			FileStorage: file_storage,
 		}
 		n, err = self.dispatchDownload(req2)
 
