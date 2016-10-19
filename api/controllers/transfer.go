@@ -313,7 +313,9 @@ func getFileDetail(file *pkg_model.File) *transfer.FileDetail {
 		FileName:       file.Name,
 		FileFlag:       file.Flag,
 		FileMode:       uint32(file.Mode),
+		FileSize:       file.Size,
 		EncryptionType: p.EncryptionType,
+		SegCnt:         file.NumSegs,
 	}
 	if p.MetaData != nil {
 		detail.MtuSize = p.MetaData.MtuSize

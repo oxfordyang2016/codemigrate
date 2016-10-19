@@ -322,7 +322,11 @@ func (self *JobManager) AddTask(t *task.Task) {
 	if jd == nil {
 		return
 	}
-	if jd.StartTime.IsZero() {
+	if jd.File == nil {
+		jd.GetFile()
+	}
+	// issue-47
+	if jd.StartTime.IsZero() || (t.NumSeg == jd.File.NumSegs) {
 		jd.SetStartTime(time.Now())
 	}
 }
