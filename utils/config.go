@@ -44,7 +44,7 @@ func (self *Config) SaveFileSlice(Switch bool) error {
 	return cfg.SaveTo(self.cfgfile)
 }
 
-func (self *Config) SaveDefaultUnpackerArgs(maxofslice uint64, numberofslice uint64) error {
+func (self *Config) SaveDefaultUnpackerArgs(min_seg_size uint64, max_seg_num uint) error {
 	cfg, err := ini.LooseLoad(self.cfgfile)
 	if err != nil {
 		return err
@@ -52,15 +52,13 @@ func (self *Config) SaveDefaultUnpackerArgs(maxofslice uint64, numberofslice uin
 
 	sec := cfg.Section("default_unpacker")
 
-	_, err5 := sec.NewKey("max_seg_size", fmt.Sprint(maxofslice))
-	if err5 != nil {
-		return err5
+	if _, err = sec.NewKey("min_seg_size", fmt.Sprint(min_seg_size)); err != nil {
+		return err
 	}
-	_, err6 := sec.NewKey("max_seg_num", fmt.Sprint(numberofslice))
+	if _, err = sec.NewKey("max_seg_cnt", fmt.Sprint(max_seg_num)); err != nil {
+		return err
+	}
 
-	if err6 != nil {
-		return err6
-	}
 	return cfg.SaveTo(self.cfgfile)
 }
 
