@@ -44,7 +44,7 @@ func (self *Config) SaveFileSlice(Switch bool) error {
 	return cfg.SaveTo(self.cfgfile)
 }
 
-func (self *Config) SaveDefaultUnpackerArgs(maxofslice int, numberofslice int) error {
+func (self *Config) SaveDefaultUnpackerArgs(maxofslice uint64, numberofslice uint64) error {
 	cfg, err := ini.LooseLoad(self.cfgfile)
 	if err != nil {
 		return err
