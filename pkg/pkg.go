@@ -111,12 +111,21 @@ func (self *DefaultUnpacker) Leave() {
 }
 
 func (self *DefaultUnpacker) Config(min_seg_size uint64, max_seg_num uint) error {
+	if min_seg_size == 0 || max_seg_num == 0 {
+		return errors.New("Invalid seg num or seg size!")
+	}
 	self.Enter()
 	defer self.Leave()
 	self.min_seg_size = min_seg_size
 	self.max_seg_num = max_seg_num
 	self.size_threshold = min_seg_size * uint64(max_seg_num)
 	return nil
+}
+
+func (self *DefaultUnpacker) GetConfig() (uint64, uint) {
+	self.Enter()
+	defer self.Leave()
+	return self.min_seg_size, self.max_seg_num
 }
 
 func GetUnpacker() Unpacker {
