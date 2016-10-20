@@ -30,6 +30,38 @@ func NewConfig(profile, cfgfile string) *Config {
 	return o
 }
 
+func (self *Config) SaveFileSlice(Switch bool) error {
+	cfg, err := ini.LooseLoad(self.cfgfile)
+	if err != nil {
+		return err
+	}
+	sec := cfg.Section("pkg")
+
+	_, err = sec.NewKey("file_slice", fmt.Sprint(Switch))
+	if err != nil {
+		return err
+	}
+	return cfg.SaveTo(self.cfgfile)
+}
+
+func (self *Config) SaveDefaultUnpackerArgs(min_seg_size uint64, max_seg_num uint) error {
+	cfg, err := ini.LooseLoad(self.cfgfile)
+	if err != nil {
+		return err
+	}
+
+	sec := cfg.Section("default_unpacker")
+
+	if _, err = sec.NewKey("min_seg_size", fmt.Sprint(min_seg_size)); err != nil {
+		return err
+	}
+	if _, err = sec.NewKey("max_seg_cnt", fmt.Sprint(max_seg_num)); err != nil {
+		return err
+	}
+
+	return cfg.SaveTo(self.cfgfile)
+}
+
 func (self *Config) Load() (*ini.File, error) {
 	if err := syscall.Access(self.profile, syscall.F_OK); err != nil {
 		return nil, fmt.Errorf("%s: %s", err.Error(), self.profile)

@@ -4,7 +4,7 @@ import (
 	"./../../pkg"
 	"./../../utils"
 	"cydex"
-	// clog "github.com/cihub/seelog"
+	clog "github.com/cihub/seelog"
 )
 
 type ConfigController struct {
@@ -67,13 +67,13 @@ func (self *ConfigController) Put() {
 		rsp.Error = cydex.ErrInvalidParam
 		return
 	}
-	if is_file_slice != pkg.IsUsingFileSlice() {
+	if pkg.IsUsingFileSlice() != is_file_slice {
 		clog.Infof("Set file slice from %t to %t", pkg.IsUsingFileSlice(), is_file_slice)
 		pkg.SetUsingFileSlice(is_file_slice)
-		// TODO save
+		utils.DefaultConfig().SaveFileSlice(is_file_slice)
 	}
 
-	default_unpacker, ok := pkg.Unpacker().(*DefaultUnpacker)
+	default_unpacker, ok := pkg.GetUnpacker().(*pkg.DefaultUnpacker)
 	if !ok {
 		rsp.Error = cydex.ErrInnerServer
 		return
@@ -81,11 +81,11 @@ func (self *ConfigController) Put() {
 	min_seg_size, max_seg_num := default_unpacker.GetConfig()
 	new_min_seg_size := req.MinSegSize * 1024 * 1024
 	if min_seg_size != new_min_seg_size || max_seg_num != req.MaxSegNum {
-		clog.Infof("Set unpacker config from (%d, %d) to (%d, %d)", new_min_seg_size, req.MaxSegNum, min_seg_size, max_seg_num)
-		if err := default_unpacker.Config(new_min_seg_size, max_seg_num); err != nil {
+		clog.Infof("Set unpacker config from (%d, %d) to (%d, %d)", min_seg_size, max_seg_num, new_min_seg_size, req.MaxSegNum)
+		if err := default_unpacker.Config(new_min_seg_size, req.MaxSegNum); err != nil {
 			rsp.Error = cydex.ErrInvalidParam
 			return
 		}
-		// save
+		utils.DefaultConfig().SaveDefaultUnpackerArgs(new_min_seg_size, req.MaxSegNum)
 	}
 }
