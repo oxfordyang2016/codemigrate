@@ -338,6 +338,12 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 		rsp.Rsp.Reason = err.Error()
 		return
 	}
+	if model.RxBandwidth == 0 {
+		model.SetRxBandwidth(msg.Req.Login.RxBandwidth)
+	}
+	if model.TxBandwidth == 0 {
+		model.SetTxBandwidth(msg.Req.Login.TxBandwidth)
+	}
 
 	self.Nid = nid
 	self.ZoneId = model.ZoneId
@@ -353,17 +359,10 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 	self.Info.CpuUsage = msg.Req.Login.CpuUsage
 	self.Info.TotalMem = msg.Req.Login.TotalMem
 	self.Info.FreeMem = msg.Req.Login.FreeMem
-	self.Info.RxBandwidth = msg.Req.Login.RxBandwidth
-	self.Info.TxBandwidth = msg.Req.Login.TxBandwidth
+	self.Info.RxBandwidth = model.RxBandwidth
+	self.Info.TxBandwidth = model.TxBandwidth
 	self.login_at = time.Now()
 	self.Update(true)
-
-	if model.RxBandwidth != msg.Req.Login.RxBandwidth {
-		model.SetRxBandwidth(msg.Req.Login.RxBandwidth)
-	}
-	if model.TxBandwidth != msg.Req.Login.TxBandwidth {
-		model.SetTxBandwidth(msg.Req.Login.TxBandwidth)
-	}
 
 	NodeMgr.AddNode(self)
 
@@ -384,8 +383,10 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 		ZoneId:                 self.ZoneId,
 		AliveInterval:          alive_interval,
 		TransferNotifyInterval: transfer_notify_interval,
-		Time:    string(t),
-		Version: version,
+		Time:        string(t),
+		Version:     version,
+		RxBandwidth: model.RxBandwidth,
+		TxBandwidth: model.TxBandwidth,
 	}
 	return
 }
