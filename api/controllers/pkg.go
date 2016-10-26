@@ -923,7 +923,7 @@ func freePkgSpace(job *pkg_model.Job) {
 				return
 			}
 			detail := getFileDetail(file)
-			task_req := buildTaskDownloadReq(job.Uid, pid, file.Fid, nil)
+			task_req := buildTaskDownloadReq(job.Uid, pid, file.Fid, nil, 0)
 			clog.Tracef("%+v", task_req)
 			node, err := task.TaskMgr.Scheduler().DispatchDownload(task_req)
 			if node != nil {

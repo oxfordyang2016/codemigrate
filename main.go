@@ -287,6 +287,10 @@ func main() {
 	clog.Infof("Start cydex transfer service, version:%s", VERSION)
 
 	config := utils.NewConfig(PROFILE, CFGFILE)
+	if config == nil {
+		clog.Critical("new config failed")
+		return
+	}
 	utils.MakeDefaultConfig(config)
 	cfg, err := config.Load()
 	if err != nil {

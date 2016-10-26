@@ -50,6 +50,9 @@ func (self *TransferController) Post() {
 		return
 	}
 	req.FinishedSize, _ = strconv.ParseUint(req.FinishedSizeStr, 10, 64)
+	if req.MaxBitrateStr != "" {
+		req.MaxBitrate, _ = strconv.ParseUint(req.MaxBitrateStr, 10, 64)
+	}
 
 	if req.Fid == "" {
 		clog.Error("Fid shouldn't be empty")
@@ -78,7 +81,7 @@ func (self *TransferController) Post() {
 	}
 }
 
-func buildTaskDownloadReq(uid, pid, fid string, sids []string) *task.DownloadReq {
+func buildTaskDownloadReq(uid, pid, fid string, sids []string, max_bitrate uint64) *task.DownloadReq {
 	file_m, _ := pkg_model.GetFile(fid)
 	detail := getFileDetail(file_m)
 	if cydex.IsFileNoSlice(file_m.Flag) && detail == nil {
@@ -94,6 +97,7 @@ func buildTaskDownloadReq(uid, pid, fid string, sids []string) *task.DownloadReq
 		Fid:        fid,
 		SidList:    sids,
 		FileDetail: detail,
+		MaxBitrate: max_bitrate,
 	}
 	if file_m != nil {
 		task_req.DownloadTaskReq.FileStorage = file_m.Storage
@@ -145,7 +149,7 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 		return
 	}
 	// get storages
-	task_req := buildTaskDownloadReq(owner_uid, pid, req.Fid, req.SegIds)
+	task_req := buildTaskDownloadReq(owner_uid, pid, req.Fid, req.SegIds, req.MaxBitrate)
 	if task_req == nil {
 		rsp.Error = cydex.ErrInnerServer
 		return
