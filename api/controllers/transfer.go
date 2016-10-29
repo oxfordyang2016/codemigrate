@@ -35,6 +35,50 @@ func canDownload(user_level int) (ret bool) {
 	return
 }
 
+// api 3.9
+// TODO 要记录上传的片段size和状态
+func (self *TransferController) Get() {
+	rsp := new(cydex.QueryTransferSegs)
+	uid := self.GetString(":uid")
+	// query := self.GetString("query")
+	fid := self.GetString("fid")
+
+	defer func() {
+		self.Data["json"] = rsp
+		self.ServeJSON()
+	}()
+
+	file_m, _ := pkg_model.GetFile(fid)
+	if file_m == nil {
+		rsp.Error = cydex.ErrFileNotExisted
+		return
+	}
+	jobid := pkg.HashJob(uid, file_m.Pid, cydex.UPLOAD)
+	job_m, _ := pkg_model.GetJob(jobid, false)
+	if job_m == nil {
+		rsp.Error = cydex.ErrFileNotExisted
+		return
+	}
+	if err := file_m.GetSegs(); err != nil {
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	for _, seg_m := range file_m.Segs {
+		seg := new(cydex.Seg)
+		seg.Status = seg_m.State
+		seg.Sid = seg_m.Sid
+		if seg_m.State != cydex.TRANSFER_STATE_DONE {
+			seg.SetSize(0)
+		} else {
+			seg.SetSize(seg_m.Size)
+		}
+		rsp.Segs = append(rsp.Segs, seg)
+	}
+	if rsp.Segs == nil {
+		rsp.Segs = make([]*cydex.Seg, 0)
+	}
+}
+
 func (self *TransferController) Post() {
 	req := new(cydex.TransferReq)
 	rsp := new(cydex.TransferRsp)
@@ -50,6 +94,9 @@ func (self *TransferController) Post() {
 		return
 	}
 	req.FinishedSize, _ = strconv.ParseUint(req.FinishedSizeStr, 10, 64)
+	if req.MaxBitrateStr != "" {
+		req.MaxBitrate, _ = strconv.ParseUint(req.MaxBitrateStr, 10, 64)
+	}
 
 	if req.Fid == "" {
 		clog.Error("Fid shouldn't be empty")
@@ -78,17 +125,24 @@ func (self *TransferController) Post() {
 	}
 }
 
-func buildTaskDownloadReq(uid, pid, fid string, sids []string) *task.DownloadReq {
-	task_req := new(task.DownloadReq)
-	task_req.DownloadTaskReq = &transfer.DownloadTaskReq{
-		TaskId:  task.GenerateTaskId(),
-		Uid:     uid,
-		Pid:     pid,
-		Fid:     fid,
-		SidList: sids,
+func buildTaskDownloadReq(uid, pid, fid string, sids []string, max_bitrate uint64) *task.DownloadReq {
+	file_m, _ := pkg_model.GetFile(fid)
+	detail := getFileDetail(file_m)
+	if cydex.IsFileNoSlice(file_m.Flag) && detail == nil {
+		clog.Errorf("%s flag is %d, detail shouldn't be nil", file_m, file_m.Flag)
+		return nil
 	}
 
-	file_m, _ := pkg_model.GetFile(fid)
+	task_req := new(task.DownloadReq)
+	task_req.DownloadTaskReq = &transfer.DownloadTaskReq{
+		TaskId:     task.GenerateTaskId(),
+		Uid:        uid,
+		Pid:        pid,
+		Fid:        fid,
+		SidList:    sids,
+		FileDetail: detail,
+		MaxBitrate: max_bitrate,
+	}
 	if file_m != nil {
 		task_req.DownloadTaskReq.FileStorage = file_m.Storage
 	}
@@ -139,7 +193,11 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 		return
 	}
 	// get storages
-	task_req := buildTaskDownloadReq(owner_uid, pid, req.Fid, req.SegIds)
+	task_req := buildTaskDownloadReq(owner_uid, pid, req.Fid, req.SegIds, req.MaxBitrate)
+	if task_req == nil {
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
 	task_req.JobId = jobid
 	trans_rsp, node, err := task.TaskMgr.DispatchDownload(task_req, DISPATCH_TIMEOUT)
 	if err != nil || node == nil || trans_rsp == nil {
@@ -203,17 +261,24 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 		return
 	}
 	transferd_size, _ := job_m.GetTransferedSize()
+	detail := getFileDetail(file_m)
+	if cydex.IsFileNoSlice(file_m.Flag) && detail == nil {
+		clog.Errorf("%s flag is %d, detail shouldn't be nil", file_m, file_m.Flag)
+		rsp.Error = cydex.ErrInnerServer
+	}
 
 	task_req := new(task.UploadReq)
 	task_req.JobId = jobid
 	task_req.FileSize = file_m.Size
 	task_req.LeftPkgSize = pkg_m.Size - transferd_size
 	task_req.UploadTaskReq = &transfer.UploadTaskReq{
-		TaskId:  task.GenerateTaskId(),
-		Uid:     uid,
-		Pid:     pid,
-		Fid:     req.Fid,
-		SidList: req.SegIds,
+		TaskId:      task.GenerateTaskId(),
+		Uid:         uid,
+		Pid:         pid,
+		Fid:         req.Fid,
+		SidList:     req.SegIds,
+		FileDetail:  detail,
+		FileStorage: file_m.Storage, //issue-31,48
 	}
 	for _, sid := range req.SegIds {
 		seg, _ := pkg_model.GetSeg(sid)
@@ -221,7 +286,6 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 			task_req.UploadTaskReq.Size += seg.Size
 		}
 	}
-	task_req.FileStorage = file_m.Storage
 
 	clog.Tracef("upload req: %+v", task_req)
 
@@ -239,7 +303,13 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 
 	task_rsp := trans_rsp.Rsp.UploadTask
 	// update storage
-	file_m.SetStorage(task_rsp.FileStorage)
+	if file_m.Storage == "" {
+		file_m.SetStorage(task_rsp.FileStorage)
+	} else {
+		if file_m.Storage != task_rsp.FileStorage {
+			clog.Warnf("File's storage url:'%s' is different from the node provides '%s'", file_m.Storage, task_rsp.FileStorage)
+		}
+	}
 
 	rsp.Host = getHost(node)
 	rsp.Port = task_rsp.Port
@@ -276,4 +346,40 @@ func getHost(node *trans.Node) string {
 		return ""
 	}
 	return node.Host
+}
+
+func getFileDetail(file *pkg_model.File) *transfer.FileDetail {
+	if file == nil {
+		return nil
+	}
+	if cydex.IsFileSlice(file.Flag) {
+		return nil
+	}
+	p, _ := pkg_model.GetPkg(file.Pid, false)
+	if p == nil {
+		return nil
+	}
+	segs, _ := pkg_model.GetSegs(file.Fid)
+	if segs == nil {
+		return nil
+	}
+	detail := &transfer.FileDetail{
+		FileName:       file.Name,
+		FileFlag:       file.Flag,
+		FileMode:       uint32(file.Mode),
+		FileSize:       file.Size,
+		EncryptionType: p.EncryptionType,
+		SegCnt:         file.NumSegs,
+	}
+	if p.MetaData != nil {
+		detail.MtuSize = p.MetaData.MtuSize
+	}
+	seg := segs[0]
+	detail.SegPerSize = seg.Size
+	s := string(seg.Sid[len(seg.Sid)-1])
+	detail.SegStartNo, _ = strconv.Atoi(s)
+
+	clog.Debugf("%+v", detail)
+
+	return detail
 }

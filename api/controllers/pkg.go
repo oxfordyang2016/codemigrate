@@ -618,11 +618,19 @@ func (self *PkgsController) createPkg(req *cydex.CreatePkgReq, rsp *cydex.Create
 		session.Close()
 	}()
 
+	// 分片与否确定file flag
+	file_flag := 0
+	if !pkg.IsUsingFileSlice() {
+		file_flag = file_flag | cydex.FILE_FLAG_NO_SLICE
+	}
+
 	unpacker := pkg.GetUnpacker()
 	if unpacker == nil {
 		rsp.Error = cydex.ErrInnerServer
 		return
 	}
+	unpacker.Enter()
+	defer unpacker.Leave()
 
 	// pkg_o := new(cydex.Pkg)
 	pid = unpacker.GeneratePid(uid, req.Title, req.Notes)
@@ -668,6 +676,7 @@ func (self *PkgsController) createPkg(req *cydex.CreatePkgReq, rsp *cydex.Create
 			PathAbs:    f.PathAbs,
 			EigenValue: f.Chara,
 			NumSegs:    len(segs),
+			Flag:       file_flag,
 		}
 		if _, err = session.Insert(file_m); err != nil {
 			rsp.Error = cydex.ErrInnerServer
@@ -850,20 +859,24 @@ func (self *PkgController) Delete() {
 	}
 
 	// 是否在传输
-	ret, err := isJobTransferring(job_m)
-	if err != nil {
-		rsp.Error = cydex.ErrInnerServer
-		return
-	}
-	if ret {
-		rsp.Error = cydex.ErrActivePackage
-		return
-	}
+	// ret, err := isJobTransferring(job_m)
+	// if err != nil {
+	// 	rsp.Error = cydex.ErrInnerServer
+	// 	return
+	// }
+	// if ret {
+	// 	rsp.Error = cydex.ErrActivePackage
+	// 	return
+	// }
+
+	// 停止传输任务
+	task.TaskMgr.StopTasks(job_m.JobId)
 
 	deleteJob(job_m)
 	go freePkgSpace(job_m)
 }
 
+// 删除上传任务
 func deleteJob(job *pkg_model.Job) {
 	if job == nil {
 		return
@@ -909,7 +922,8 @@ func freePkgSpace(job *pkg_model.Job) {
 			if file.Size == 0 {
 				return
 			}
-			task_req := buildTaskDownloadReq(job.Uid, pid, file.Fid, nil)
+			detail := getFileDetail(file)
+			task_req := buildTaskDownloadReq(job.Uid, pid, file.Fid, nil, 0)
 			clog.Tracef("%+v", task_req)
 			node, err := task.TaskMgr.Scheduler().DispatchDownload(task_req)
 			if node != nil {
@@ -921,6 +935,7 @@ func freePkgSpace(job *pkg_model.Job) {
 					Pid:         pid,
 					Fid:         file.Fid,
 					FileStorage: task_req.DownloadTaskReq.FileStorage,
+					FileDetail:  detail,
 				}
 				clog.Tracef("%+v", msg.Req.RemoveFile)
 				if _, err = node.SendRequestSync(msg, timeout); err != nil {

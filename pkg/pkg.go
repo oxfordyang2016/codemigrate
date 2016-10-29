@@ -7,9 +7,12 @@ import (
 	// "cydex/transfer"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 )
 
+var lock sync.Mutex
+var use_file_slice bool
 var unpacker Unpacker
 
 // 拆包器接口
@@ -22,6 +25,9 @@ type Unpacker interface {
 	GenerateSegs(fid string, f *cydex.SimpleFile) (segs []*cydex.Seg, err error)
 	// GetPidFromFid, 快速获取pid
 	GetPidFromFid(fid string) string
+	// Unpack可能会设置参数,这里要保护
+	Enter()
+	Leave()
 }
 
 // 默认拆包方法, 实现Unpacker接口
@@ -31,11 +37,17 @@ type DefaultUnpacker struct {
 	max_seg_num    uint
 	size_threshold uint64 // f.Size大于该值的, 按照最多max_seg_num拆分, 否则按照min_seg_size拆分
 	start_no       int    // 起始序号
+	lock           sync.Mutex
 }
 
 // min_seg_size: 最小分片size(bytes) max_seg_num: 最大分片数
 func NewDefaultUnpacker(min_seg_size uint64, max_seg_num uint) *DefaultUnpacker {
-	return &DefaultUnpacker{min_seg_size, max_seg_num, min_seg_size * uint64(max_seg_num), 1}
+	return &DefaultUnpacker{
+		min_seg_size:   min_seg_size,
+		max_seg_num:    max_seg_num,
+		size_threshold: min_seg_size * uint64(max_seg_num),
+		start_no:       1,
+	}
 }
 
 func (self *DefaultUnpacker) GeneratePid(uid string, title, notes string) (pid string) {
@@ -90,6 +102,32 @@ func (self *DefaultUnpacker) GetPidFromFid(fid string) (pid string) {
 	return
 }
 
+func (self *DefaultUnpacker) Enter() {
+	self.lock.Lock()
+}
+
+func (self *DefaultUnpacker) Leave() {
+	self.lock.Unlock()
+}
+
+func (self *DefaultUnpacker) Config(min_seg_size uint64, max_seg_num uint) error {
+	if min_seg_size == 0 || max_seg_num == 0 {
+		return errors.New("Invalid seg num or seg size!")
+	}
+	self.Enter()
+	defer self.Leave()
+	self.min_seg_size = min_seg_size
+	self.max_seg_num = max_seg_num
+	self.size_threshold = min_seg_size * uint64(max_seg_num)
+	return nil
+}
+
+func (self *DefaultUnpacker) GetConfig() (uint64, uint) {
+	self.Enter()
+	defer self.Leave()
+	return self.min_seg_size, self.max_seg_num
+}
+
 func GetUnpacker() Unpacker {
 	return unpacker
 }
@@ -98,4 +136,16 @@ func SetUnpacker(u Unpacker) {
 	if u != nil {
 		unpacker = u
 	}
+}
+
+func IsUsingFileSlice() bool {
+	lock.Lock()
+	defer lock.Unlock()
+	return use_file_slice
+}
+
+func SetUsingFileSlice(enable bool) {
+	lock.Lock()
+	defer lock.Unlock()
+	use_file_slice = enable
 }

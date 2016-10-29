@@ -245,3 +245,55 @@ func (self *NodeStatusController) Get() {
 		}
 	}
 }
+
+type NodeZoneController struct {
+	BaseController
+}
+
+func (self *NodeZoneController) Put() {
+	rsp := new(cydex.BaseRsp)
+	type Req struct {
+		ZoneId *string `json:"zone_id"`
+	}
+	req := new(Req)
+
+	defer func() {
+		self.Data["json"] = rsp
+		self.ServeJSON()
+	}()
+
+	// 获取请求
+	if err := self.FetchJsonBody(req); err != nil {
+		rsp.Error = cydex.ErrInvalidParam
+		return
+	}
+
+	var zid string
+	if req.ZoneId == nil {
+		rsp.Error = cydex.ErrInvalidParam
+		return
+	}
+	zid = *req.ZoneId
+
+	nid := self.GetString(":id")
+	node_m, _ := models.GetNode(nid)
+	if node_m == nil {
+		rsp.Error = cydex.ErrInvalidParam
+		return
+	}
+
+	if zid != "" {
+		zone_m, _ := models.GetZone(zid)
+		if zone_m == nil {
+			rsp.Error = cydex.ErrInvalidParam
+			return
+		}
+	}
+
+	if err := node_m.SetZone(zid); err != nil {
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+
+	trans.NodeMgr.ReloadNodeModel(false, []string{nid})
+}

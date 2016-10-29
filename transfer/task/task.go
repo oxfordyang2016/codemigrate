@@ -3,6 +3,7 @@ package task
 import (
 	trans "./.."
 	"./../../utils/cache"
+	"./../models"
 	"crypto/rand"
 	"cydex"
 	"cydex/transfer"
@@ -47,7 +48,6 @@ type UploadReq struct {
 	JobId         string
 	LeftPkgSize   uint64 //issue-29 pkg未传输size
 	FileSize      uint64
-	FileStorage   string //issue-31
 	restrict_mode int
 }
 
@@ -229,19 +229,28 @@ func (self *TaskManager) DelObserver(id uint32) {
 }
 
 func (self *TaskManager) AddTask(t *Task) {
-	// delete timeouted task
-	// for _, t := range self.tasks {
-	// 	if time.Since(t.UpdateAt) > TASK_TIMEOUT {
-	// 		self.DelTask(t.TaskId)
-	// 	}
-	// }
 	if err := SaveTaskToCache(t, self.cache_timeout); err != nil {
 		clog.Error("save task %s cache failed", t)
 	}
 
+	var zoneid string
 	node := trans.NodeMgr.GetByNid(t.Nid)
 	if node != nil {
+		zoneid = node.ZoneId
 		node.AddTaskCnt(t.Type, 1)
+	}
+
+	// issue-44: save task scheduler record
+	if models.DB() != nil {
+		models.CreateTask(&models.Task{
+			TaskId:  t.TaskId,
+			Type:    t.Type,
+			NodeId:  t.Nid,
+			ZoneId:  zoneid,
+			JobId:   t.JobId,
+			Fid:     t.Fid,
+			NumSegs: t.NumSeg,
+		})
 	}
 
 	self.lock.Lock()
@@ -251,7 +260,7 @@ func (self *TaskManager) AddTask(t *Task) {
 	for _, o := range self.observers {
 		o.AddTask(t)
 	}
-	clog.Infof("Add task %s", t)
+	clog.Infof("Add task %s to node(%s)", t, t.Nid)
 }
 
 func (self *TaskManager) GetTask(taskid string) *Task {
@@ -312,6 +321,8 @@ func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (
 		return
 	}
 
+	clog.Infof("try to dispatch task(U) %s to %s", req.TaskId, node)
+
 	msg := transfer.NewReqMessage("", "uploadtask", "", 0)
 	msg.Req.UploadTask = req.UploadTaskReq
 	if rsp, err = node.SendRequestSync(msg, timeout); err != nil {
@@ -347,6 +358,8 @@ func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duratio
 		err = errors.New("Scheduler didn't find suitable node for downloading")
 		return
 	}
+
+	clog.Infof("try to dispatch task(D) %s to %s", req.TaskId, node)
 
 	msg := transfer.NewReqMessage("", "downloadtask", "", 0)
 	msg.Req.DownloadTask = req.DownloadTaskReq

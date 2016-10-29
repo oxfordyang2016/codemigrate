@@ -322,8 +322,19 @@ func (self *JobManager) AddTask(t *task.Task) {
 	if jd == nil {
 		return
 	}
-	if jd.StartTime.IsZero() {
-		jd.SetStartTime(time.Now())
+	if jd.File == nil {
+		jd.GetFile()
+	}
+	// issue-47, issue-50
+	if jd.StartTime.IsZero() || (t.NumSeg == jd.File.NumSegs) {
+		if jd.File.Size > 0 {
+			jd.Reset()
+			jd.StartTime = time.Now()
+		} else {
+			jd.StartTime = time.Now()
+			jd.FinishTime = jd.StartTime
+		}
+		jd.Save()
 	}
 }
 

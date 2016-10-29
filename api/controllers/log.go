@@ -34,18 +34,19 @@ func (self *LogController) getDiskInfo() {
 
 	var total, free uint64
 
+	total, free = trans.CalcStorage()
 	// 管理员
-	if self.UserLevel == cydex.USER_LEVEL_ADMIN {
-		trans.NodeMgr.WalkNodes(func(n *trans.Node) {
-			total += n.Info.TotalStorage
-			free += n.Info.FreeStorage
-		})
-	} else {
-		trans.NodeMgr.WalkNodes(func(n *trans.Node) {
-			total += n.Info.TotalStorage
-			free += n.Info.FreeStorage
-		})
-	}
+	// if self.UserLevel == cydex.USER_LEVEL_ADMIN {
+	// 	trans.NodeMgr.WalkNodes(func(n *trans.Node) {
+	// 		total += n.Info.TotalStorage
+	// 		free += n.Info.FreeStorage
+	// 	})
+	// } else {
+	// 	trans.NodeMgr.WalkNodes(func(n *trans.Node) {
+	// 		total += n.Info.TotalStorage
+	// 		free += n.Info.FreeStorage
+	// 	})
+	// }
 
 	rsp.SpaceStr = utils.GetHumanSize(free)
 	rsp.TotalStr = utils.GetHumanSize(total)

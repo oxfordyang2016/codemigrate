@@ -49,6 +49,7 @@ type NodeObserver interface {
 	AddNode(n *Node)
 	UpdateNode(n *Node, req *transfer.KeepaliveReq)
 	DelNode(n *Node)
+	NodeZoneChange(n *Node, old_zid, new_zid string)
 }
 
 // TransferNode管理
@@ -82,6 +83,7 @@ func (self *NodeManager) GetByNid(id string) *Node {
 
 func (self *NodeManager) AddNode(node *Node) {
 	clog.Infof("Node Add: %+v", node)
+	node.mgr = self
 	self.mux.Lock()
 	defer self.mux.Unlock()
 	n := self.id_map[node.Nid]
@@ -117,6 +119,14 @@ func (self *NodeManager) AddObserver(observer NodeObserver) {
 	self.observers = append(self.observers, observer)
 }
 
+func (self *NodeManager) NodeZoneChange(n *Node, old_zid, new_zid string) {
+	self.mux.Lock()
+	defer self.mux.Unlock()
+	for _, o := range self.observers {
+		o.NodeZoneChange(n, old_zid, new_zid)
+	}
+}
+
 func (self *NodeManager) WalkNodes(walk_fun func(n *Node)) {
 	if walk_fun == nil {
 		return
@@ -126,6 +136,25 @@ func (self *NodeManager) WalkNodes(walk_fun func(n *Node)) {
 	for _, node := range self.id_map {
 		walk_fun(node)
 	}
+}
+
+// Node需要重新reload数据库的信息,再做处理, 例如zone的改动
+func (self *NodeManager) ReloadNodeModel(all bool, nid_list []string) error {
+	if !all {
+		for _, nid := range nid_list {
+			node := self.GetByNid(nid)
+			if node != nil {
+				node.ReloadModel()
+			}
+		}
+		return nil
+	}
+
+	// all nodes
+	self.WalkNodes(func(n *Node) {
+		n.ReloadModel()
+	})
+	return nil
 }
 
 type NodeInfo struct {
@@ -146,14 +175,15 @@ type NodeInfo struct {
 	DownloadTaskCnt int
 }
 
-type TimeMessage struct {
+type PendingReq struct {
 	*transfer.Message
-	ts time.Time
+	rsp     *transfer.Message
+	rsp_sem chan int
 }
 
-func NewTimeMessage(msg *transfer.Message) *TimeMessage {
-	return &TimeMessage{
-		msg, time.Now(),
+func NewPendingReq(req *transfer.Message) *PendingReq {
+	return &PendingReq{
+		req, nil, make(chan int, 1),
 	}
 }
 
@@ -161,7 +191,7 @@ func NewTimeMessage(msg *transfer.Message) *TimeMessage {
 type Node struct {
 	Nid    string
 	ZoneId string
-	model  *models.Node
+	// model  *models.Node
 
 	// 运行时数据
 	Host  string
@@ -170,25 +200,23 @@ type Node struct {
 
 	// private
 	// alive_interval uint32
-	login_at time.Time
-	ws       *websocket.Conn
-	lock     sync.Mutex
-	seq      uint32
-	// rsp_chan chan *TimeMessage
-	rsp_sem     chan int
-	rsp_lock    sync.Mutex
-	rsp_msgs    map[uint32]*TimeMessage
-	server      *WSServer
-	closed      bool
-	remote_addr string
+	login_at     time.Time
+	ws           *websocket.Conn
+	lock         sync.Mutex
+	seq          uint32
+	req_lock     sync.Mutex
+	pending_reqs map[uint32]*PendingReq
+	server       *WSServer
+	closed       bool
+	remote_addr  string
+	mgr          *NodeManager
 }
 
 func NewNode(ws *websocket.Conn, server *WSServer) *Node {
 	n := new(Node)
 	n.server = server
 	n.SetWSConn(ws)
-	n.rsp_sem = make(chan int)
-	n.rsp_msgs = make(map[uint32]*TimeMessage)
+	n.pending_reqs = make(map[uint32]*PendingReq)
 	return n
 }
 
@@ -216,8 +244,11 @@ func (self *Node) Update(update_login_time bool) {
 		t := time.Now().Add(time.Duration(self.server.config.KeepaliveInterval) * time.Second * 3)
 		self.ws.SetDeadline(t)
 	}
-	if update_login_time && self.model != nil {
-		self.model.UpdateLoginTime(time.Now())
+	if update_login_time {
+		model, _ := models.GetNode(self.Nid)
+		if model != nil {
+			model.UpdateLoginTime(time.Now())
+		}
 	}
 }
 
@@ -225,11 +256,6 @@ func (self *Node) HandleMsg(msg *transfer.Message) (rsp *transfer.Message, err e
 	if msg.IsReq() {
 		rsp = msg.BuildRsp()
 		rsp.Rsp.Code = cydex.OK
-		// if msg == nil {
-		// 	rsp.Rsp.Code = cydex.ErrInvalidParam
-		// 	rsp.Rsp.Reason = "Invalid Param"
-		// 	return
-		// }
 	}
 
 	lower_cmd := strings.ToLower(msg.Cmd)
@@ -251,10 +277,12 @@ func (self *Node) HandleMsg(msg *transfer.Message) (rsp *transfer.Message, err e
 			self.Update(false)
 		}
 	} else {
-		self.rsp_lock.Lock()
-		self.rsp_msgs[msg.Seq] = NewTimeMessage(msg)
-		self.rsp_lock.Unlock()
-		self.rsp_sem <- 1
+		self.req_lock.Lock()
+		if req, _ := self.pending_reqs[msg.Seq]; req != nil {
+			req.rsp = msg
+			req.rsp_sem <- 1
+		}
+		self.req_lock.Unlock()
 	}
 	return
 }
@@ -278,9 +306,9 @@ func (self *Node) handleRegister(msg, rsp *transfer.Message) (err error) {
 	return
 }
 
-func (self *Node) IsRegisted() bool {
-	return self.model != nil
-}
+// func (self *Node) IsRegisted() bool {
+// 	return self.model != nil
+// }
 
 func (self *Node) IsLogined() bool {
 	return self.Token != ""
@@ -300,18 +328,25 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 	// 	// node with same nid is logined, and should kickout
 	// 	n.Close(true)
 	// }
-	if self.model, err = models.GetNode(nid); err != nil {
+	var model *models.Node
+	if model, err = models.GetNode(nid); err != nil {
 		return
 	}
-	if self.model == nil {
+	if model == nil {
 		err = fmt.Errorf("%s is not registed", nid)
 		rsp.Rsp.Code = cydex.ErrInvalidParam
 		rsp.Rsp.Reason = err.Error()
 		return
 	}
+	if model.RxBandwidth == 0 {
+		model.SetRxBandwidth(msg.Req.Login.RxBandwidth)
+	}
+	if model.TxBandwidth == 0 {
+		model.SetTxBandwidth(msg.Req.Login.TxBandwidth)
+	}
 
 	self.Nid = nid
-	self.ZoneId = self.model.ZoneId
+	self.ZoneId = model.ZoneId
 	self.Token = uuid.New()
 	self.Info.Version = msg.Req.Login.Version
 	self.Info.F2tpVersion = msg.Req.Login.F2tpVersion
@@ -324,17 +359,10 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 	self.Info.CpuUsage = msg.Req.Login.CpuUsage
 	self.Info.TotalMem = msg.Req.Login.TotalMem
 	self.Info.FreeMem = msg.Req.Login.FreeMem
-	self.Info.RxBandwidth = msg.Req.Login.RxBandwidth
-	self.Info.TxBandwidth = msg.Req.Login.TxBandwidth
+	self.Info.RxBandwidth = model.RxBandwidth
+	self.Info.TxBandwidth = model.TxBandwidth
 	self.login_at = time.Now()
 	self.Update(true)
-
-	if self.model.RxBandwidth != msg.Req.Login.RxBandwidth {
-		self.model.SetRxBandwidth(msg.Req.Login.RxBandwidth)
-	}
-	if self.model.TxBandwidth != msg.Req.Login.TxBandwidth {
-		self.model.SetTxBandwidth(msg.Req.Login.TxBandwidth)
-	}
 
 	NodeMgr.AddNode(self)
 
@@ -355,8 +383,10 @@ func (self *Node) handleLogin(msg, rsp *transfer.Message) (err error) {
 		ZoneId:                 self.ZoneId,
 		AliveInterval:          alive_interval,
 		TransferNotifyInterval: transfer_notify_interval,
-		Time:    string(t),
-		Version: version,
+		Time:        string(t),
+		Version:     version,
+		RxBandwidth: model.RxBandwidth,
+		TxBandwidth: model.TxBandwidth,
 	}
 	return
 }
@@ -399,10 +429,9 @@ func (self *Node) handleTransferNotify(msg, rsp *transfer.Message) (err error) {
 		return
 	}
 
-	NodeMgr.StateChan <- msg.Req.TransferNotify.TaskStateList
-	// for _, r := range msg.Req.TransferNotify.TaskStateList {
-	// 	NodeMgr.StateChan <- r
-	// }
+	if self.mgr != nil {
+		self.mgr.StateChan <- msg.Req.TransferNotify.TaskStateList
+	}
 
 	return
 }
@@ -411,6 +440,13 @@ func (self *Node) SendRequest(msg *transfer.Message) error {
 	if !msg.IsReq() {
 		return errors.New("msg is not request")
 	}
+
+	self.req_lock.Lock()
+	msg.Seq = self.seq
+	self.pending_reqs[msg.Seq] = NewPendingReq(msg)
+	self.seq++
+	self.req_lock.Unlock()
+
 	return self.SendMessage(msg)
 }
 
@@ -421,10 +457,6 @@ func (self *Node) SendMessage(msg *transfer.Message) error {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
-	if msg.IsReq() {
-		msg.Seq = self.seq
-		self.seq++
-	}
 	if self.closed {
 		return fmt.Errorf("%s send msg failed because closed", self)
 	}
@@ -441,51 +473,60 @@ func (self *Node) SendRequestSync(msg *transfer.Message, timeout time.Duration) 
 		return
 	}
 
+	var pending_req *PendingReq
+	self.req_lock.Lock()
+	pending_req = self.pending_reqs[msg.Seq]
+	self.req_lock.Unlock()
+	if pending_req == nil {
+		err = fmt.Errorf("%s can't get pending req, it's impossible!", self)
+		return nil, err
+	}
+
 	var alive bool
 
 	select {
-	case _, alive = <-self.rsp_sem:
+	case _, alive = <-pending_req.rsp_sem:
 		if !alive {
-			err = fmt.Errorf("%s rsp_sem closed, maybe disconnected")
+			err = fmt.Errorf("%s rsp_sem closed, maybe disconnected", self)
 			return nil, err
 		}
-
-		self.rsp_lock.Lock()
-		defer self.rsp_lock.Unlock()
-		time_msg, _ := self.rsp_msgs[msg.Seq]
-		if time_msg != nil && time_msg.Message != nil {
-			rsp = time_msg.Message
-		}
-		delete(self.rsp_msgs, msg.Seq)
-
-		// 删除超时的响应消息
-		for _, m := range self.rsp_msgs {
-			if time.Since(m.ts) >= MESSAGE_TIMEOUT {
-				delete(self.rsp_msgs, m.Seq)
-			}
-		}
+		rsp = pending_req.rsp
 	case <-time.After(timeout):
 		err = fmt.Errorf("%s msg %s wait rsp timeout", self, msg.Cmd)
 	}
+
+	// jzh: 最后要clear该msg
+	self.req_lock.Lock()
+	delete(self.pending_reqs, msg.Seq)
+	self.req_lock.Unlock()
+
 	return
 }
 
 func (self *Node) Close(del_from_mgr bool) {
+	self.req_lock.Lock()
+	for _, req := range self.pending_reqs {
+		close(req.rsp_sem)
+	}
+	self.req_lock.Unlock()
+
 	self.lock.Lock()
 	self.closed = true
-	if self.rsp_sem != nil {
-		close(self.rsp_sem)
-	}
 	if self.ws != nil {
 		self.ws.Close()
 	}
 	self.lock.Unlock()
 
-	if self.model != nil {
-		self.model.UpdateLogoutTime(time.Now())
+	if models.DB() != nil {
+		model, _ := models.GetNode(self.Nid)
+		if model != nil {
+			model.UpdateLogoutTime(time.Now())
+		}
 	}
 	if del_from_mgr {
-		NodeMgr.DelNode(self.Nid)
+		if self.mgr != nil {
+			self.mgr.DelNode(self.Nid)
+		}
 	}
 }
 
@@ -522,4 +563,74 @@ func (self *Node) AddTaskCnt(typ int, v int) {
 	if *cnt < 0 {
 		*cnt = 0
 	}
+}
+
+func (self *Node) ReloadModel() error {
+	model, err := models.GetNode(self.Nid)
+	if err != nil {
+		return err
+	}
+	new_zid := model.ZoneId
+	if new_zid != self.ZoneId {
+		clog.Infof("update node zoneid: %s ('%s' -> '%s')", self, self.ZoneId, new_zid)
+		if self.mgr != nil {
+			self.mgr.NodeZoneChange(self, self.ZoneId, new_zid)
+		}
+		self.ZoneId = new_zid
+		// notify remote node
+		go func() {
+			msg := transfer.NewReqMessage("", "config", "", 0)
+			msg.Req.Config = &transfer.ConfigReq{
+				ZoneId: &new_zid,
+			}
+			_, err := self.SendRequestSync(msg, 5*time.Second)
+			if err != nil {
+				clog.Error(err)
+			}
+		}()
+	}
+	return nil
+}
+
+// 无zone的node的storage累加
+// 同一个zone的nodes,理论上nodes的total应该是一致的,free取最小的那个
+// 多zone再累加
+func CalcStorage() (total, free uint64) {
+	NodeMgr.WalkNodes(func(n *Node) {
+		if n.ZoneId == "" {
+			total += n.Info.TotalStorage
+			free += n.Info.FreeStorage
+		}
+	})
+	zones, _ := models.GetZones(nil)
+	for _, zone := range zones {
+		t, f := calcZoneStorage(zone.Zid)
+		total += t
+		free += f
+	}
+	return
+}
+
+func calcZoneStorage(zid string) (total, free uint64) {
+	nid_list, _ := models.GetNidsByZone(zid)
+	var total_max, free_min uint64
+	for _, nid := range nid_list {
+		node := NodeMgr.GetByNid(nid)
+		if node == nil {
+			continue
+		}
+		if node.Info.TotalStorage > total_max {
+			total_max = node.Info.TotalStorage
+		}
+		if free_min == 0 {
+			free_min = node.Info.FreeStorage
+		} else {
+			if node.Info.FreeStorage > 0 && node.Info.FreeStorage < free_min {
+				free_min = node.Info.FreeStorage
+			}
+		}
+	}
+	total = total_max
+	free = free_min
+	return
 }
