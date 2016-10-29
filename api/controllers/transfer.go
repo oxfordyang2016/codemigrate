@@ -35,6 +35,50 @@ func canDownload(user_level int) (ret bool) {
 	return
 }
 
+// api 3.9
+// TODO 要记录上传的片段size和状态
+func (self *TransferController) Get() {
+	rsp := new(cydex.QueryTransferSegs)
+	uid := self.GetString(":uid")
+	// query := self.GetString("query")
+	fid := self.GetString("fid")
+
+	defer func() {
+		self.Data["json"] = rsp
+		self.ServeJSON()
+	}()
+
+	file_m, _ := pkg_model.GetFile(fid)
+	if file_m == nil {
+		rsp.Error = cydex.ErrFileNotExisted
+		return
+	}
+	jobid := pkg.HashJob(uid, file_m.Pid, cydex.UPLOAD)
+	job_m, _ := pkg_model.GetJob(jobid, false)
+	if job_m == nil {
+		rsp.Error = cydex.ErrFileNotExisted
+		return
+	}
+	if err := file_m.GetSegs(); err != nil {
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	for _, seg_m := range file_m.Segs {
+		seg := new(cydex.Seg)
+		seg.Status = seg_m.State
+		seg.Sid = seg_m.Sid
+		if seg_m.State != cydex.TRANSFER_STATE_DONE {
+			seg.SetSize(0)
+		} else {
+			seg.SetSize(seg_m.Size)
+		}
+		rsp.Segs = append(rsp.Segs, seg)
+	}
+	if rsp.Segs == nil {
+		rsp.Segs = make([]*cydex.Seg, 0)
+	}
+}
+
 func (self *TransferController) Post() {
 	req := new(cydex.TransferReq)
 	rsp := new(cydex.TransferRsp)
