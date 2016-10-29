@@ -1,0 +1,15 @@
+[Unit]
+Description=Cydex Transfer Service
+#After=mariadb.service
+#After=redis.service
+
+[Service]
+Type=simple
+ExecStart=/opt/cydex/bin/transfer_service
+TimeoutSec=30
+Restart=always
+RestartSec=10s
+FailureAction=
+
+[Install]
+WantedBy=multi-user.target

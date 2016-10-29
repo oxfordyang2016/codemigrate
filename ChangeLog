@@ -1,13 +1,11 @@
-2016-10-19 v0.1.0-preview3 zh.jin <zh.jin@catontechnology.com>
+2016-10-29 v0.1.0-beta1 zh.jin <zh.jin@catontechnology.com>
 	* issue-48, 修复分片被存储到不同分区上的问题,上传也要带storage url参数
 	* issue-50, 重新下载需要清除原先的值,再设置起始时间
 	* issue-51, 下载限速值处理并传给node
 	* issue-52, node带宽以ts上的为准
-
-2016-10-14 v0.1.0-preview2 zh.jin <zh.jin@catontechnology.com>
 	* 增加zone调度
-	* 解决SendRequestSync()等待消息的问题, ref transfer_service(issue-45)
-	* 删除被暂停的包裹, ref issue-46
+	* issue-45, 解决SendRequestSync()等待消息的问题
+	* issue-46, 删除被暂停的包裹
 
 2016-10-08 v0.0.1-alpha2 zh.jin <zh.jin@catontechnology.com>
 	* 增加统计接口
