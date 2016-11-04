@@ -1,23 +1,35 @@
 package statistics
 
 import (
-	// trans "./../transfer"
 	"./../transfer/task"
 	"./models"
 	"cydex"
 	"cydex/transfer"
-	// "fmt"
+	// clog "github.com/cihub/seelog"
 	"sync"
-	// "time"
 )
 
 type BitrateArray []uint64
 
 // 任务统计
 type StatTask struct {
-	Type       int
-	totalbytes uint64
-	bitrates   []uint64
+	Type             int
+	segs_total_bytes map[string]uint64
+	bitrates         []uint64
+}
+
+func NewStatTask() *StatTask {
+	o := new(StatTask)
+	o.segs_total_bytes = make(map[string]uint64)
+	return o
+}
+
+func (self *StatTask) TotalBytes() uint64 {
+	var total uint64
+	for _, b := range self.segs_total_bytes {
+		total += b
+	}
+	return total
 }
 
 type StatTransferManager struct {
@@ -185,24 +197,25 @@ func (self *StatTransferManager) DelTask(t *task.Task) {
 
 	max, min, avg := calcMinMaxAvg(stat_task.bitrates)
 
-	var pTotalBytes, pMaxBitrate, pMinBitrate, pAvgBitrate *uint64
+	var pTotalBytes, pMaxBitrate, pMinBitrate, pAvgBitrate, pTasks *uint64
 	switch t.Type {
 	case cydex.UPLOAD:
 		pTotalBytes = &stat_trans.RxTotalBytes
 		pMaxBitrate = &stat_trans.RxMaxBitrate
 		pMinBitrate = &stat_trans.RxMinBitrate
 		pAvgBitrate = &stat_trans.RxAvgBitrate
+		pTasks = &stat_trans.RxTasks
 	case cydex.DOWNLOAD:
 		pTotalBytes = &stat_trans.TxTotalBytes
 		pMaxBitrate = &stat_trans.TxMaxBitrate
 		pMinBitrate = &stat_trans.TxMinBitrate
 		pAvgBitrate = &stat_trans.TxAvgBitrate
+		pTasks = &stat_trans.TxTasks
 	default:
 		return
 	}
 
-	// FIXME 对下载来说TotalBytes比实际文件要小
-	*pTotalBytes += stat_task.totalbytes
+	*pTotalBytes += stat_task.TotalBytes()
 	if max > *pMaxBitrate {
 		*pMaxBitrate = max
 	}
@@ -210,11 +223,10 @@ func (self *StatTransferManager) DelTask(t *task.Task) {
 		*pMinBitrate = min
 	}
 
-	if *pAvgBitrate == 0 {
+	if *pTasks <= 1 {
 		*pAvgBitrate = avg
 	} else {
-		// NOTE: 和原均值平分
-		*pAvgBitrate = (*pAvgBitrate + avg) / 2
+		*pAvgBitrate = (*pAvgBitrate*(*pTasks-1) + avg) / (*pTasks)
 	}
 	stat_trans.Update()
 
@@ -225,19 +237,23 @@ func (self *StatTransferManager) TaskStateNotify(t *task.Task, state *transfer.T
 	if state == nil {
 		return
 	}
+	if state.Sid == "" || state.State != "end" {
+		return
+	}
+
 	self.task_mux.Lock()
 	defer self.task_mux.Unlock()
 
 	stat_task := self.stat_tasks[state.TaskId]
 	if stat_task == nil {
-		stat_task = new(StatTask)
+		stat_task = NewStatTask()
 		if t == nil {
 			return
 		}
 		stat_task.Type = t.Type
 		self.stat_tasks[state.TaskId] = stat_task
 	}
-	stat_task.totalbytes = state.GetTotalBytes()
+	stat_task.segs_total_bytes[state.Sid] = state.GetTotalBytes()
 	stat_task.bitrates = append(stat_task.bitrates, state.Bitrate)
 }
 
