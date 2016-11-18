@@ -21,7 +21,8 @@ import (
 )
 
 const (
-	TASK_CACHE_TIMEOUT = 20 * 60
+	TASK_CACHE_TIMEOUT    = 20 * 60
+	TASK_MAX_BITRATES_CNT = 1000
 )
 
 var (
@@ -87,8 +88,9 @@ type DownloadReq struct {
 
 type Task struct {
 	*models.Task
-	bitrates  []uint64
-	timestamp time.Time
+	bitrates     [TASK_MAX_BITRATES_CNT]uint64
+	bitrates_cnt uint32
+	timestamp    time.Time
 }
 
 // type Task struct {
@@ -168,7 +170,9 @@ func (self *Task) Stop() {
 }
 
 func (self *Task) inputBitrate(bitrate uint64) {
-	self.bitrates = append(self.bitrates, bitrate)
+	idx := self.bitrates_cnt % TASK_MAX_BITRATES_CNT
+	self.bitrates[idx] = bitrate
+	self.bitrates_cnt++
 }
 
 // func (self *Task) IsOver() bool {
@@ -318,8 +322,11 @@ func (self *TaskManager) delTask(taskid string) {
 		return
 	}
 
-	clog.Debugf("%v\n", t.bitrates)
-	min, avg, max, sd := BitrateStatistics(t.bitrates)
+	cnt := t.bitrates_cnt
+	if cnt > TASK_MAX_BITRATES_CNT {
+		cnt = TASK_MAX_BITRATES_CNT
+	}
+	min, avg, max, sd := BitrateStatistics(t.bitrates[:cnt])
 	if models.DB() != nil {
 		t.UpdateBitrateStatistics(min, avg, max, sd)
 	}

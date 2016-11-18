@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	VERSION = "0.1.0-beta2"
+	VERSION = "0.1.1-alpha1"
 )
 
 const (

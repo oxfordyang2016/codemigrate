@@ -67,9 +67,19 @@ func updateJobDetail(jd *models.JobDetail, state *transfer.TaskState, seg_state 
 		if seg_m != nil {
 			state.RealTotalBytes = seg_m.Size
 		}
-		jd.FinishedSize += state.GetTotalBytes()
+		if jd.File == nil {
+			jd.GetFile()
+		}
 		jd.CurSegSize = 0
+		jd.FinishedSize += state.GetTotalBytes()
 		jd.NumFinishedSegs++
+		// cdxs-22, 保护数据不过限
+		if jd.FinishedSize > jd.File.Size {
+			jd.FinishedSize = jd.File.Size
+		}
+		if jd.NumFinishedSegs > jd.File.NumSegs {
+			jd.NumFinishedSegs = jd.File.NumSegs
+		}
 		save = true
 	} else {
 		jd.CurSegSize = state.TotalBytes
