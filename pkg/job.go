@@ -326,7 +326,7 @@ func (self *JobManager) AddTask(t *task.Task) {
 		jd.GetFile()
 	}
 	// issue-47, issue-50
-	if jd.StartTime.IsZero() || (t.NumSeg == jd.File.NumSegs) {
+	if jd.StartTime.IsZero() || (t.NumSegs == jd.File.NumSegs) {
 		if jd.File.Size > 0 {
 			jd.Reset()
 			jd.StartTime = time.Now()

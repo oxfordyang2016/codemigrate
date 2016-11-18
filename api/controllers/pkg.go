@@ -1056,16 +1056,16 @@ func (self *FileController) Get() {
 }
 
 // 是否在传输
-func isJobTransferring(job *pkg_model.Job) (bool, error) {
-	tasks, err := task.LoadTasksByPidFromCache(job.Pid)
-	if err != nil {
-		return false, err
-	}
-	if len(tasks) > 0 {
-		return true, nil
-	}
-	return false, nil
-}
+// func isJobTransferring(job *pkg_model.Job) (bool, error) {
+// 	tasks, err := task.LoadTasksByPidFromCache(job.Pid)
+// 	if err != nil {
+// 		return false, err
+// 	}
+// 	if len(tasks) > 0 {
+// 		return true, nil
+// 	}
+// 	return false, nil
+// }
 
 func isJobsTransferring(jobs []*pkg_model.Job) ([]bool, error) {
 	tasks, err := task.LoadTasksFromCache(nil)

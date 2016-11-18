@@ -5,8 +5,8 @@ import (
 	api_ctrl "./api/controllers"
 	"./pkg"
 	pkg_model "./pkg/models"
-	"./statistics"
-	stat_model "./statistics/models"
+	// "./statistics"
+	// stat_model "./statistics/models"
 	trans "./transfer"
 	trans_model "./transfer/models"
 	"./transfer/task"
@@ -69,25 +69,16 @@ func setupDB(cfg *ini.File) (err error) {
 	var tables []interface{}
 	tables = append(tables, pkg_model.Tables...)
 	tables = append(tables, trans_model.Tables...)
-	tables = append(tables, stat_model.Tables...)
+	// tables = append(tables, stat_model.Tables...)
 	if err = db.SyncTables(tables); err != nil {
 		return
 	}
-	// if err = pkg_model.SyncTables(); err != nil {
-	// 	return
-	// }
-	// if err = trans_model.SyncTables(); err != nil {
-	// 	return
-	// }
-	// if err = stat_model.SyncTables(); err != nil {
-	// 	return
-	// }
 
 	// 设置cache
 	var caches []interface{}
 	caches = append(caches, pkg_model.Caches...)
 	caches = append(caches, trans_model.Caches...)
-	caches = append(caches, stat_model.Caches...)
+	// caches = append(caches, stat_model.Caches...)
 	db.MapCache(caches)
 	return
 }
@@ -245,9 +236,9 @@ func setupApplication(cfg *ini.File) (err error) {
 	if err = setupDB(cfg); err != nil {
 		return
 	}
-	if err = setupCache(cfg); err != nil {
-		return
-	}
+	// if err = setupCache(cfg); err != nil {
+	// 	return
+	// }
 	if err = setupPkg(cfg); err != nil {
 		return
 	}
@@ -269,7 +260,7 @@ func run() {
 	// task add observer for job
 	task.TaskMgr.AddObserver(pkg.JobMgr)
 	// task add observer for statistics
-	task.TaskMgr.AddObserver(statistics.TransferMgr)
+	// task.TaskMgr.AddObserver(statistics.TransferMgr)
 	// 从数据库导入track
 	pkg.JobMgr.LoadTracks()
 
