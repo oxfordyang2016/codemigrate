@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	trans_model "./../transfer/models"
 	"./../transfer/task"
 	"./../utils/db"
 	"./models"
@@ -177,10 +178,12 @@ func Test_CreateJob(t *testing.T) {
 				jd := JobMgr.GetJobDetail(j.JobId, fid1)
 				So(jd.StartTime.IsZero(), ShouldBeTrue)
 				t := &task.Task{
-					TaskId: "t1",
-					JobId:  hashid,
-					Fid:    fid1,
-					Type:   cydex.UPLOAD,
+					Task: &trans_model.Task{
+						TaskId: "t1",
+						JobId:  hashid,
+						Fid:    fid1,
+						Type:   cydex.UPLOAD,
+					},
 				}
 				JobMgr.AddTask(t)
 				So(jd.StartTime.IsZero(), ShouldBeFalse)
@@ -197,10 +200,12 @@ func Test_CreateJob(t *testing.T) {
 					Bitrate:    123,
 				}
 				t := &task.Task{
-					TaskId: "t1",
-					JobId:  hashid,
-					Fid:    fid1,
-					Type:   cydex.UPLOAD,
+					Task: &trans_model.Task{
+						TaskId: "t1",
+						JobId:  hashid,
+						Fid:    fid1,
+						Type:   cydex.UPLOAD,
+					},
 				}
 				JobMgr.TaskStateNotify(t, state)
 				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_DOING)
@@ -219,10 +224,12 @@ func Test_CreateJob(t *testing.T) {
 					Bitrate:    123,
 				}
 				t := &task.Task{
-					TaskId: "t1",
-					JobId:  hashid,
-					Fid:    fid1,
-					Type:   cydex.UPLOAD,
+					Task: &trans_model.Task{
+						TaskId: "t1",
+						JobId:  hashid,
+						Fid:    fid1,
+						Type:   cydex.UPLOAD,
+					},
 				}
 				JobMgr.TaskStateNotify(t, state)
 				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_DONE)
@@ -242,10 +249,12 @@ func Test_CreateJob(t *testing.T) {
 					Bitrate:    123,
 				}
 				t := &task.Task{
-					TaskId: "t2",
-					JobId:  hashid,
-					Fid:    fid2,
-					Type:   cydex.UPLOAD,
+					Task: &trans_model.Task{
+						TaskId: "t2",
+						JobId:  hashid,
+						Fid:    fid2,
+						Type:   cydex.UPLOAD,
+					},
 				}
 				JobMgr.TaskStateNotify(t, state)
 				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_DONE)

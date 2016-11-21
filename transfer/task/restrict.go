@@ -130,7 +130,7 @@ func (self *RestrictUploadScheduler) AddTask(t *Task) {
 	defer self.lock.Unlock()
 
 	xid := self.getId(t, nil)
-	self.resource.Add(xid, t.Nid, DEFAULT_RESOUCE_EXPIRE)
+	self.resource.Add(xid, t.NodeId, DEFAULT_RESOUCE_EXPIRE)
 }
 
 func (self *RestrictUploadScheduler) DelTask(t *Task) {
@@ -149,7 +149,7 @@ func (self *RestrictUploadScheduler) TaskStateNotify(t *Task, state *transfer.Ta
 	self.lock.Lock()
 
 	xid := self.getId(t, nil)
-	self.resource.Update(xid, t.Nid)
+	self.resource.Update(xid, t.NodeId)
 }
 
 type Resource struct {

@@ -17,6 +17,9 @@ func fillTransferState(state *cydex.TransferState, uid string, size uint64, jd *
 	state.State = jd.State
 	if size > 0 {
 		state.Percent = int((jd.FinishedSize + jd.CurSegSize) * 100 / size)
+		if state.Percent > 100 {
+			state.Percent = 100
+		}
 	} else {
 		state.Percent = 100
 	}
@@ -1056,16 +1059,16 @@ func (self *FileController) Get() {
 }
 
 // 是否在传输
-func isJobTransferring(job *pkg_model.Job) (bool, error) {
-	tasks, err := task.LoadTasksByPidFromCache(job.Pid)
-	if err != nil {
-		return false, err
-	}
-	if len(tasks) > 0 {
-		return true, nil
-	}
-	return false, nil
-}
+// func isJobTransferring(job *pkg_model.Job) (bool, error) {
+// 	tasks, err := task.LoadTasksByPidFromCache(job.Pid)
+// 	if err != nil {
+// 		return false, err
+// 	}
+// 	if len(tasks) > 0 {
+// 		return true, nil
+// 	}
+// 	return false, nil
+// }
 
 func isJobsTransferring(jobs []*pkg_model.Job) ([]bool, error) {
 	tasks, err := task.LoadTasksFromCache(nil)

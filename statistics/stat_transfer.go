@@ -157,9 +157,9 @@ func (self *StatTransferManager) AddTask(t *task.Task) {
 	if t == nil {
 		return
 	}
-	stat_trans, _ := models.GetTransfer(t.Nid)
+	stat_trans, _ := models.GetTransfer(t.NodeId)
 	if stat_trans == nil {
-		stat_trans, _ = models.NewTransferWithId(t.Nid)
+		stat_trans, _ = models.NewTransferWithId(t.NodeId)
 	}
 	if stat_trans == nil {
 		// log
@@ -190,7 +190,7 @@ func (self *StatTransferManager) DelTask(t *task.Task) {
 	if stat_task == nil || len(stat_task.bitrates) == 0 {
 		return
 	}
-	stat_trans, _ := models.GetTransfer(t.Nid)
+	stat_trans, _ := models.GetTransfer(t.NodeId)
 	if stat_trans == nil {
 		return
 	}
