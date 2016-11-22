@@ -57,7 +57,12 @@ func GetJob(jobid string, with_pkg bool) (*Job, error) {
 func GetJobs(typ int, p *cydex.Pagination) ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	var err error
-	sess := DB().Where("type=? and soft_del=0", typ)
+	query := "type=? and soft_del=0"
+	if p != nil {
+		n, _ := DB().Where(query, typ).Count(new(Job))
+		p.TotalNum = n
+	}
+	sess := DB().Where(query, typ)
 	if p != nil {
 		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
 	}
@@ -71,7 +76,12 @@ func GetJobs(typ int, p *cydex.Pagination) ([]*Job, error) {
 func GetJobsByUid(uid string, typ int, p *cydex.Pagination) ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	var err error
-	sess := DB().Where("uid=? and type=? and soft_del=0", uid, typ)
+	query := "uid=? and type=? and soft_del=0"
+	if p != nil {
+		n, _ := DB().Where(query, uid, typ).Count(new(Job))
+		p.TotalNum = n
+	}
+	sess := DB().Where(query, uid, typ)
 	if p != nil {
 		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
 	}
@@ -85,7 +95,12 @@ func GetJobsByUid(uid string, typ int, p *cydex.Pagination) ([]*Job, error) {
 func GetJobsByPid(pid string, typ int, p *cydex.Pagination) ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	var err error
-	sess := DB().Where("pid=? and type=? and soft_del=0", pid, typ)
+	query := "pid=? and type=? and soft_del=0"
+	if p != nil {
+		n, _ := DB().Where(query, pid, typ).Count(new(Job))
+		p.TotalNum = n
+	}
+	sess := DB().Where(query, pid, typ)
 	if p != nil {
 		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
 	}

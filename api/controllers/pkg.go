@@ -207,6 +207,9 @@ func (self *PkgsController) getAllJobs() {
 
 		rsp.Pkgs = append(rsp.Pkgs, pkg_c)
 	}
+	if page != nil {
+		rsp.TotalNum = int(page.TotalNum)
+	}
 }
 
 func (self *PkgsController) getJobs(typ int) {
@@ -255,6 +258,9 @@ func (self *PkgsController) getJobs(typ int) {
 		}
 
 		rsp.Pkgs = append(rsp.Pkgs, pkg_c)
+	}
+	if page != nil {
+		rsp.TotalNum = int(page.TotalNum)
 	}
 }
 
@@ -394,6 +400,12 @@ func (self *PkgsController) getLitePkgs() {
 	uid := self.GetString(":uid")
 	query := self.GetString("query")
 	rsp := new(cydex.QueryPkgLiteRsp)
+	page := new(cydex.Pagination)
+	page.PageSize, _ = self.GetInt("page_size")
+	page.PageNum, _ = self.GetInt("page_num")
+	if !page.Verify() {
+		page = nil
+	}
 
 	defer func() {
 		if rsp.Pkgs == nil {
@@ -414,7 +426,7 @@ func (self *PkgsController) getLitePkgs() {
 			rsp.Error = cydex.ErrNotAllowed
 			return
 		}
-		jobs, err := pkg_model.GetJobs(cydex.UPLOAD, nil)
+		jobs, err := pkg_model.GetJobs(cydex.UPLOAD, page)
 		if err != nil {
 			clog.Error(err)
 			rsp.Error = cydex.ErrInnerServer
@@ -427,7 +439,7 @@ func (self *PkgsController) getLitePkgs() {
 			pkgs = append(pkgs, j.Pkg)
 		}
 	case "sender":
-		jobs, err := pkg_model.GetJobsByUid(uid, cydex.UPLOAD, nil)
+		jobs, err := pkg_model.GetJobsByUid(uid, cydex.UPLOAD, page)
 		if err != nil {
 			clog.Error(err)
 			rsp.Error = cydex.ErrInnerServer
@@ -440,7 +452,7 @@ func (self *PkgsController) getLitePkgs() {
 			pkgs = append(pkgs, j.Pkg)
 		}
 	case "receiver":
-		jobs, err := pkg_model.GetJobsByUid(uid, cydex.DOWNLOAD, nil)
+		jobs, err := pkg_model.GetJobsByUid(uid, cydex.DOWNLOAD, page)
 		if err != nil {
 			clog.Error(err)
 			rsp.Error = cydex.ErrInnerServer
@@ -483,6 +495,9 @@ func (self *PkgsController) getLitePkgs() {
 			pkg_lite.Receiver = append(pkg_lite.Receiver, &cydex.UserLite{Uid: j.Uid})
 		}
 		rsp.Pkgs = append(rsp.Pkgs, pkg_lite)
+	}
+	if page != nil {
+		rsp.TotalNum = int(page.TotalNum)
 	}
 }
 
