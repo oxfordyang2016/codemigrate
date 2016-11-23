@@ -11,7 +11,7 @@ var (
 		new(Job), new(JobDetail),
 	}
 	Caches []interface{} = []interface{}{
-		new(Pkg), new(File), new(Seg),
+		new(Pkg), new(File), new(Seg), new(JobDetail),
 	}
 )
 

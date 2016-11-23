@@ -240,9 +240,9 @@ func (self *Job) String() string {
 
 type JobDetail struct {
 	Id              int64     `xorm:"pk autoincr"`
-	JobId           string    `xorm:"not null"`
+	JobId           string    `xorm:"unique(jobid_fid) not null"`
 	Job             *Job      `xorm:"-"`
-	Fid             string    `xorm:"varchar(24) not null"`
+	Fid             string    `xorm:"unique(jobid_fid) varchar(24) not null "`
 	File            *File     `xorm:"-"`
 	StartTime       time.Time `xorm:"DateTime"`
 	FinishTime      time.Time `xorm:"DateTime"`
