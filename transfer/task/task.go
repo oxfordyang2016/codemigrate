@@ -52,6 +52,7 @@ type UploadReq struct {
 	LeftPkgSize   uint64 //issue-29 pkg未传输size
 	FileSize      uint64
 	restrict_mode int
+	Ip            string
 }
 
 // func NewUploadReq(r *transfer.UploadTaskReq, pid string) (req *UploadReq, err error) {
@@ -72,6 +73,7 @@ type DownloadReq struct {
 	// meta  interface{}
 	url   *URL.URL
 	JobId string
+	Ip    string
 }
 
 // func NewDownloadReq(r *transfer.DownloadTaskReq, pid string, finished_sid_list []string) (req *DownloadReq, err error) {
@@ -387,6 +389,7 @@ func (self *TaskManager) DispatchUpload(req *UploadReq, timeout time.Duration) (
 	t := NewTask(req.JobId, msg)
 	t.NodeId = node.Nid
 	t.AllocatedBitrate = uint64(rsp.Rsp.UploadTask.RecomendBitrate)
+	t.PeerIp = req.Ip
 	TaskMgr.AddTask(t)
 
 	return
@@ -425,6 +428,7 @@ func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duratio
 	t := NewTask(req.JobId, msg)
 	t.NodeId = node.Nid
 	t.AllocatedBitrate = uint64(rsp.Rsp.DownloadTask.RecomendBitrate)
+	t.PeerIp = req.Ip
 	TaskMgr.AddTask(t)
 	return
 }

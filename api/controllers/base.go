@@ -19,6 +19,7 @@ var (
 type BaseController struct {
 	beego.Controller
 	UserLevel int
+	Ip        string
 }
 
 func (self *BaseController) fetchUserLevel() {
@@ -31,8 +32,14 @@ func (self *BaseController) fetchUserLevel() {
 	}
 }
 
+func (self *BaseController) fetchIp() {
+	ip := self.Ctx.Input.Header("x-cydex-ip")
+	self.Ip = ip
+}
+
 func (self *BaseController) Prepare() {
 	self.fetchUserLevel()
+	self.fetchIp()
 }
 
 func (self *BaseController) Finish() {

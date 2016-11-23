@@ -199,6 +199,7 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 		return
 	}
 	task_req.JobId = jobid
+	task_req.Ip = self.Ip
 	trans_rsp, node, err := task.TaskMgr.DispatchDownload(task_req, DISPATCH_TIMEOUT)
 	if err != nil || node == nil || trans_rsp == nil {
 		clog.Error(err)
@@ -286,6 +287,7 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 			task_req.UploadTaskReq.Size += seg.Size
 		}
 	}
+	task_req.Ip = self.Ip
 
 	clog.Tracef("upload req: %+v", task_req)
 
