@@ -205,6 +205,7 @@ func Test_CreateJob(t *testing.T) {
 						JobId:  hashid,
 						Fid:    fid1,
 						Type:   cydex.UPLOAD,
+						State:  cydex.TRANSFER_STATE_DOING,
 					},
 				}
 				JobMgr.TaskStateNotify(t, state)
@@ -213,7 +214,7 @@ func Test_CreateJob(t *testing.T) {
 				So(jd.FinishedSize, ShouldEqual, 0)
 			})
 
-			Convey("task end", func() {
+			Convey("task sid end", func() {
 				jd := JobMgr.GetJobDetail(j.JobId, fid1)
 				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_DOING)
 				state := &transfer.TaskState{
@@ -229,6 +230,7 @@ func Test_CreateJob(t *testing.T) {
 						JobId:  hashid,
 						Fid:    fid1,
 						Type:   cydex.UPLOAD,
+						State:  cydex.TRANSFER_STATE_DONE,
 					},
 				}
 				JobMgr.TaskStateNotify(t, state)
@@ -254,6 +256,7 @@ func Test_CreateJob(t *testing.T) {
 						JobId:  hashid,
 						Fid:    fid2,
 						Type:   cydex.UPLOAD,
+						State:  cydex.TRANSFER_STATE_DONE,
 					},
 				}
 				JobMgr.TaskStateNotify(t, state)
@@ -263,6 +266,23 @@ func Test_CreateJob(t *testing.T) {
 				So(j.NumUnfinishedDetails, ShouldEqual, 0)
 				So(j.IsFinished(), ShouldBeTrue)
 				So(JobMgr.HasCachedJob(j.JobId), ShouldBeFalse)
+			})
+
+			Convey("task self interrupted", func() {
+				jd := JobMgr.GetJobDetail(j.JobId, fid1)
+				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_DONE)
+				t := &task.Task{
+					Task: &trans_model.Task{
+						TaskId: "t1",
+						JobId:  hashid,
+						Fid:    fid1,
+						Type:   cydex.UPLOAD,
+						State:  cydex.TRANSFER_STATE_PAUSE,
+					},
+				}
+				JobMgr.DelTask(t)
+				jd = JobMgr.GetJobDetail(j.JobId, fid1)
+				So(jd.State, ShouldEqual, cydex.TRANSFER_STATE_PAUSE)
 			})
 		})
 	})

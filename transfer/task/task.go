@@ -435,23 +435,8 @@ func (self *TaskManager) DispatchDownload(req *DownloadReq, timeout time.Duratio
 
 func (self *TaskManager) handleTaskState(state *transfer.TaskState) (err error) {
 	// clog.Tracef("TaskState: %+v", state)
-	t := self.GetTask(state.TaskId)
-	if t != nil {
-		t.timestamp = time.Now()
-	}
-
-	if state.Sid != "" {
-		if t != nil {
-			t.inputBitrate(state.Bitrate)
-		}
-		self.lock.Lock()
-		for _, o := range self.observers {
-			o.TaskStateNotify(t, state)
-		}
-		self.lock.Unlock()
-	} else {
-		clog.Infof("%s is over", t)
-		self.DelTask(state.TaskId)
+	if state == nil {
+		return
 	}
 
 	var sv int
@@ -466,11 +451,30 @@ func (self *TaskManager) handleTaskState(state *transfer.TaskState) (err error) 
 	default:
 		return
 	}
-	if t != nil && t.State != sv {
-		t.State = sv
-		if models.DB() != nil {
-			t.UpdateState(sv)
+
+	t := self.GetTask(state.TaskId)
+	if t != nil {
+		t.timestamp = time.Now()
+		if t.State != sv {
+			t.State = sv
+			if models.DB() != nil {
+				t.UpdateState(sv)
+			}
 		}
+	}
+
+	if state.Sid != "" {
+		if t != nil {
+			t.inputBitrate(state.Bitrate)
+		}
+		self.lock.Lock()
+		for _, o := range self.observers {
+			o.TaskStateNotify(t, state)
+		}
+		self.lock.Unlock()
+	} else {
+		clog.Infof("%s is over", t)
+		self.DelTask(state.TaskId)
 	}
 
 	return

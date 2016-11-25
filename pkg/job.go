@@ -10,7 +10,6 @@ import (
 	"cydex/transfer"
 	"fmt"
 	clog "github.com/cihub/seelog"
-	"strings"
 	"sync"
 	"time"
 )
@@ -349,7 +348,23 @@ func (self *JobManager) AddTask(t *task.Task) {
 }
 
 func (self *JobManager) DelTask(t *task.Task) {
-	if t != nil {
+	if t == nil {
+		return
+	}
+
+	// cdxs-23: task结束也要处理jd
+	jobid := t.JobId
+	j := self.GetJob(jobid)
+	if j == nil {
+		return
+	}
+	jd := self.GetJobDetail(jobid, t.Fid)
+	if jd == nil {
+		return
+	}
+	if jd.State != t.State {
+		jd.State = t.State
+		jd.Save()
 	}
 }
 
@@ -371,20 +386,8 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 		jd.GetFile()
 	}
 
+	seg_state := t.State
 	// 更新JobDetails状态, 根据判断更新Job状态, 是否finished?
-	seg_state := 0
-	s := strings.ToLower(state.State)
-	switch s {
-	case "transferring":
-		seg_state = cydex.TRANSFER_STATE_DOING
-	case "interrupted":
-		seg_state = cydex.TRANSFER_STATE_PAUSE
-	case "end":
-		seg_state = cydex.TRANSFER_STATE_DONE
-	default:
-		return
-	}
-
 	force_save := updateJobDetail(jd, state, seg_state)
 
 	if jd.State == cydex.TRANSFER_STATE_DONE {
