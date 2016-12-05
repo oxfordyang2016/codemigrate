@@ -179,6 +179,16 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 		pkg.JobMgr.ProcessJob(jobid)
 		return
 	}
+	job_detail := pkg.JobMgr.GetJobDetail(jobid, req.Fid)
+	if job_detail == nil {
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	if job_detail.State == cydex.TRANSFER_STATE_DOING {
+		clog.Warnf("%s is still tansferring, can't transfer again", job_detail)
+		rsp.Error = cydex.ErrCreateTransferAgain
+		return
+	}
 	// update jd process
 	pkg.UpdateJobDetailProcess(jobid, req.Fid, req.FinishedSize, req.NumFinishedSegs)
 
@@ -257,8 +267,17 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 	jobid := pkg.HashJob(uid, pid, cydex.UPLOAD)
 	job_m := pkg.JobMgr.GetJob(jobid)
 	if job_m == nil {
-		clog.Error(err)
 		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	job_detail := pkg.JobMgr.GetJobDetail(jobid, req.Fid)
+	if job_detail == nil {
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	if job_detail.State == cydex.TRANSFER_STATE_DOING {
+		clog.Warnf("%s is still tansferring, can't transfer again", job_detail)
+		rsp.Error = cydex.ErrCreateTransferAgain
 		return
 	}
 	transferd_size, _ := job_m.GetTransferedSize()

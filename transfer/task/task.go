@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	TASK_CACHE_TIMEOUT    = 20 * 60
+	TASK_CACHE_TIMEOUT    = 30 // in seconds
 	TASK_MAX_BITRATES_CNT = 1000
 )
 
@@ -93,6 +93,7 @@ type Task struct {
 	bitrates     [TASK_MAX_BITRATES_CNT]uint64
 	bitrates_cnt uint32
 	timestamp    time.Time
+	closeC       chan int
 }
 
 // type Task struct {
@@ -110,6 +111,7 @@ func NewTask(job_id string, msg *transfer.Message) *Task {
 	t.Task = new(models.Task)
 	t.JobId = job_id
 	t.timestamp = time.Now()
+	t.closeC = make(chan int)
 
 	var sid_list []string
 
@@ -177,18 +179,44 @@ func (self *Task) inputBitrate(bitrate uint64) {
 	self.bitrates_cnt++
 }
 
-// func (self *Task) IsOver() bool {
-// 	finished_segs := 0
-// 	for _, state := range self.SegsState {
-// 		if state.State == "interrupted" || state.State == "end" {
-// 			finished_segs++
-// 		}
-// 	}
-// 	if finished_segs == len(self.SegsState) {
-// 		return true
-// 	}
-// 	return false
-// }
+func (self *Task) startCheckTimer(d time.Duration) {
+	go func() {
+		tick := time.NewTicker(d)
+	quit:
+		for {
+			select {
+			case now := <-tick.C:
+				{
+					if self.timestamp.Add(d).Before(now) {
+						// 更新状态,超时设为PAUSE
+						if self.State == cydex.TRANSFER_STATE_DOING {
+							self.State = cydex.TRANSFER_STATE_PAUSE
+							if models.DB() != nil {
+								self.UpdateState(cydex.TRANSFER_STATE_PAUSE)
+							}
+						}
+						clog.Infof("%s timer is timeout", self)
+						TaskMgr.DelTask(self.TaskId)
+						break quit
+					}
+				}
+			case <-self.closeC:
+				{
+					break quit
+				}
+			}
+		}
+		tick.Stop()
+		clog.Tracef("%s timer quit", self)
+	}()
+}
+
+func (self *Task) close() {
+	select {
+	case self.closeC <- 1:
+	default:
+	}
+}
 
 func (self *Task) String() string {
 	var s string
@@ -276,17 +304,18 @@ func (self *TaskManager) AddTask(t *Task) {
 	if models.DB() != nil {
 		models.CreateTask(t.Task)
 	}
+	t.startCheckTimer(time.Duration(self.cache_timeout) * time.Second)
 
 	self.lock.Lock()
 	defer self.lock.Unlock()
 
-	// 删除过期的task
-	for k, v := range self.tasks {
-		if time.Now().After(v.timestamp.Add(time.Duration(self.cache_timeout) * time.Second)) {
-			clog.Infof("Delete timeout task %s", v)
-			self.delTask(k)
-		}
-	}
+	// // 删除过期的task
+	// for k, v := range self.tasks {
+	// 	if time.Now().After(v.timestamp.Add(time.Duration(self.cache_timeout) * time.Second)) {
+	// 		clog.Infof("Delete timeout task %s", v)
+	// 		self.delTask(k)
+	// 	}
+	// }
 
 	self.tasks[t.TaskId] = t
 	for _, o := range self.observers {
@@ -323,6 +352,8 @@ func (self *TaskManager) delTask(taskid string) {
 	if t == nil {
 		return
 	}
+
+	t.close()
 
 	cnt := t.bitrates_cnt
 	if cnt > TASK_MAX_BITRATES_CNT {

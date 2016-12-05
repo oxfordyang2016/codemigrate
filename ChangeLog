@@ -1,7 +1,8 @@
-2016-11-22 v0.1.1-alpha1 zh.jin <zh.jin@catontechnology.com>
+2016-11-22 v0.1.1-alpha zh.jin <zh.jin@catontechnology.com>
 	* cdxs-13, 查询包裹支持分页功能
 	* cdxs-20, 增加task记录的字段,为报表统计做准备;使用数据库+cache代替redis来获取task信息
 	* cdxs-22, 修复可能的传输进度超限问题
+	* cdxs-24, 修复重复续传造成进度回退的问题
 
 2016-10-29 v0.1.0-beta1 zh.jin <zh.jin@catontechnology.com>
 	* issue-48, 修复分片被存储到不同分区上的问题,上传也要带storage url参数
