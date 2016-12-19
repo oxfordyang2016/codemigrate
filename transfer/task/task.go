@@ -361,6 +361,7 @@ func (self *TaskManager) delTask(taskid string) {
 	}
 	min, avg, max, sd := BitrateStatistics(t.bitrates[:cnt])
 	if models.DB() != nil {
+		t.UpdateTotalTraffic(t.TotalTraffic)
 		t.UpdateBitrateStatistics(min, avg, max, sd)
 	}
 
@@ -491,6 +492,9 @@ func (self *TaskManager) handleTaskState(state *transfer.TaskState) (err error) 
 			if models.DB() != nil {
 				t.UpdateState(sv)
 			}
+		}
+		if state.TotalTraffic > 0 && t.TotalTraffic != state.TotalTraffic {
+			t.TotalTraffic = state.TotalTraffic
 		}
 	}
 
