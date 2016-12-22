@@ -18,8 +18,10 @@ var (
 
 type BaseController struct {
 	beego.Controller
-	UserLevel int
-	Ip        string
+	UserLevel              int
+	Ip                     string
+	UserMaxUploadBitrate   uint64
+	UserMaxDownloadBitrate uint64
 }
 
 func (self *BaseController) fetchUserLevel() {
@@ -37,9 +39,27 @@ func (self *BaseController) fetchIp() {
 	self.Ip = ip
 }
 
+func (self *BaseController) fetchUserMaxBitrate() {
+	v := self.Ctx.Input.Header("x-cydex-user-max-upload-bitrate")
+	if v != "" {
+		i, err := strconv.ParseUint(v, 10, 64)
+		if err == nil {
+			self.UserMaxUploadBitrate = i
+		}
+	}
+	v = self.Ctx.Input.Header("x-cydex-user-max-download-bitrate")
+	if v != "" {
+		i, err := strconv.ParseUint(v, 10, 64)
+		if err == nil {
+			self.UserMaxDownloadBitrate = i
+		}
+	}
+}
+
 func (self *BaseController) Prepare() {
 	self.fetchUserLevel()
 	self.fetchIp()
+	self.fetchUserMaxBitrate()
 }
 
 func (self *BaseController) Finish() {
