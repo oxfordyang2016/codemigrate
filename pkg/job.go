@@ -116,6 +116,12 @@ func NewTrack() *Track {
 // 	NumFinishedDetails int
 // }
 
+type JobObserver interface {
+	OnJobCreate(uid, pid string, typ int)
+	OnJobStart(*models.Job)
+	OnJobFinish(*models.Job)
+}
+
 type JobManager struct {
 	lock               sync.Mutex
 	cache_sync_timeout time.Duration //cache同步超时时间
@@ -125,6 +131,7 @@ type JobManager struct {
 	track_users   map[string]*Track      // uid->track, track里记录上传下载的pid
 	track_pkgs    map[string]*Track      // pid->track, track里记录上传下载的uid
 	track_deletes map[string]*Track      // uid->track, track里记录被删除的pid
+	job_observers []JobObserver
 }
 
 func NewJobManager() *JobManager {
@@ -175,6 +182,11 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 
 		// 删除原有的cache
 		delete(self.jobs, jobid)
+
+		// notify observers
+		for _, o := range self.job_observers {
+			o.OnJobCreate(uid, pid, typ)
+		}
 		return nil
 	}
 
@@ -238,6 +250,11 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 		for _, u_job := range upload_jobs {
 			self.AddTrack(u_job.Uid, u_job.Pid, u_job.Type, false)
 		}
+	}
+
+	// notify observers
+	for _, o := range self.job_observers {
+		o.OnJobCreate(uid, pid, typ)
 	}
 
 	return nil
@@ -344,6 +361,17 @@ func (self *JobManager) AddTask(t *task.Task) {
 			jd.FinishTime = jd.StartTime
 		}
 		jd.Save()
+	}
+
+	if job.IsCached {
+		if !job.IsTransferring {
+			job.IsTransferring = true
+			self.lock.Lock()
+			defer self.lock.Unlock()
+			for _, o := range self.job_observers {
+				o.OnJobStart(job)
+			}
+		}
 	}
 }
 
@@ -685,12 +713,18 @@ func (self *JobManager) ProcessJob(jobid string) {
 				self.lock.Lock()
 				delete(self.jobs, jobid)
 				self.DelTrack(job.Uid, job.Pid, job.Type, false)
+				for _, o := range self.job_observers {
+					o.OnJobFinish(job)
+				}
 				self.lock.Unlock()
 			}()
 		} else {
 			self.lock.Lock()
 			delete(self.jobs, jobid)
 			self.DelTrack(job.Uid, job.Pid, job.Type, false)
+			for _, o := range self.job_observers {
+				o.OnJobFinish(job)
+			}
 			self.lock.Unlock()
 		}
 	}
@@ -726,6 +760,15 @@ func (self *JobManager) ClearTracks(mutex bool) {
 	self.track_users = make(map[string]*Track)
 	self.track_pkgs = make(map[string]*Track)
 	self.track_deletes = make(map[string]*Track)
+}
+
+func (self *JobManager) AddJobObserver(o JobObserver) {
+	if o == nil {
+		return
+	}
+	defer self.lock.Unlock()
+	self.lock.Lock()
+	self.job_observers = append(self.job_observers, o)
 }
 
 // 更新JD进度

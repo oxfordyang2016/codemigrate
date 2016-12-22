@@ -103,6 +103,30 @@ func Test_Track(t *testing.T) {
 	})
 }
 
+type FakeJobObserver struct {
+	upload_job_create_v   int
+	download_job_create_v int
+	finished_v            int
+	start_job             *models.Job
+	finish_job            *models.Job
+}
+
+func (self *FakeJobObserver) OnJobCreate(uid, pid string, typ int) {
+	if typ == cydex.UPLOAD {
+		self.upload_job_create_v += 1
+	} else {
+		self.download_job_create_v += 1
+	}
+}
+
+func (self *FakeJobObserver) OnJobStart(job *models.Job) {
+	self.start_job = job
+}
+
+func (self *FakeJobObserver) OnJobFinish(job *models.Job) {
+	self.finish_job = job
+}
+
 func Test_CreateJob(t *testing.T) {
 	var err error
 	pid := "1234567890ab1111122222"
@@ -110,6 +134,9 @@ func Test_CreateJob(t *testing.T) {
 	sid1_of_fid1 := "123456789011111222220100000001"
 	fid2 := "1234567890111112222202"
 	sid1_of_fid2 := "123456789011111222220200000001"
+
+	fake_job_observer := new(FakeJobObserver)
+	JobMgr.AddJobObserver(fake_job_observer)
 
 	Convey("Test CreateJob", t, func() {
 		Convey("Create pkg records first", func() {
@@ -149,6 +176,7 @@ func Test_CreateJob(t *testing.T) {
 			So(j, ShouldNotBeNil)
 			j = JobMgr.GetJob(hashid)
 			So(j, ShouldNotBeNil)
+			So(fake_job_observer.upload_job_create_v, ShouldEqual, 1)
 		})
 
 		Convey("Create download job", func() {
@@ -160,6 +188,7 @@ func Test_CreateJob(t *testing.T) {
 			So(j, ShouldNotBeNil)
 			j = JobMgr.GetJob(hashid)
 			So(j, ShouldNotBeNil)
+			So(fake_job_observer.download_job_create_v, ShouldEqual, 1)
 
 			hashid = HashJob("not_existed_uid", pid, cydex.DOWNLOAD)
 			j, err = models.GetJob(hashid, true)
@@ -187,6 +216,9 @@ func Test_CreateJob(t *testing.T) {
 				}
 				JobMgr.AddTask(t)
 				So(jd.StartTime.IsZero(), ShouldBeFalse)
+
+				So(fake_job_observer.start_job.Pid, ShouldEqual, pid)
+				So(fake_job_observer.start_job.Uid, ShouldEqual, "1234567890ab")
 			})
 
 			Convey("task transferring", func() {
@@ -242,6 +274,8 @@ func Test_CreateJob(t *testing.T) {
 			Convey("job end", func() {
 				So(j.IsFinished(), ShouldBeFalse)
 
+				So(fake_job_observer.finish_job, ShouldBeNil)
+
 				jd := JobMgr.GetJobDetail(j.JobId, fid2)
 				state := &transfer.TaskState{
 					TaskId:     "t2",
@@ -266,6 +300,8 @@ func Test_CreateJob(t *testing.T) {
 				So(j.NumUnfinishedDetails, ShouldEqual, 0)
 				So(j.IsFinished(), ShouldBeTrue)
 				So(JobMgr.HasCachedJob(j.JobId), ShouldBeFalse)
+
+				So(fake_job_observer.finish_job, ShouldEqual, j)
 			})
 
 			Convey("task self interrupted", func() {
