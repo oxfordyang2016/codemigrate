@@ -16,7 +16,7 @@
 
 	</outputs>
 	<formats>
-		<format id="main" format="%Date(01-02) %Time [%LEVEL]%t %Msg (%RelFile:%Line)%n"/>
-		<format id="error" format="%Date(01-02) %Time [%LEVEL]%t %Msg (%RelFile:%Line)%n"/>
+		<format id="main" format="%UTCDate(2006-01-02 15:04:05) [%LEVEL]%t %Msg (%RelFile:%Line)%n"/>
+		<format id="error" format="%UTCDate(2006-01-02 15:04:05) [%LEVEL]%t %Msg (%RelFile:%Line)%n"/>
 	</formats>
 </seelog>

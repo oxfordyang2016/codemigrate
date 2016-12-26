@@ -117,7 +117,7 @@ func NewTrack() *Track {
 // }
 
 type JobObserver interface {
-	OnJobCreate(uid, pid string, typ int)
+	OnJobCreate(*models.Job)
 	OnJobStart(*models.Job)
 	OnJobFinish(*models.Job)
 }
@@ -185,7 +185,7 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 
 		// notify observers
 		for _, o := range self.job_observers {
-			o.OnJobCreate(uid, pid, typ)
+			o.OnJobCreate(job_m)
 		}
 		return nil
 	}
@@ -254,7 +254,7 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 
 	// notify observers
 	for _, o := range self.job_observers {
-		o.OnJobCreate(uid, pid, typ)
+		o.OnJobCreate(j)
 	}
 
 	return nil

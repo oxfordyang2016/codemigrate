@@ -111,8 +111,8 @@ type FakeJobObserver struct {
 	finish_job            *models.Job
 }
 
-func (self *FakeJobObserver) OnJobCreate(uid, pid string, typ int) {
-	if typ == cydex.UPLOAD {
+func (self *FakeJobObserver) OnJobCreate(job *models.Job) {
+	if job.Type == cydex.UPLOAD {
 		self.upload_job_create_v += 1
 	} else {
 		self.download_job_create_v += 1

@@ -7,6 +7,7 @@ import (
 	pkg_model "./pkg/models"
 	// "./statistics"
 	// stat_model "./statistics/models"
+	"./notify"
 	trans "./transfer"
 	trans_model "./transfer/models"
 	"./transfer/task"
@@ -33,6 +34,9 @@ var (
 	ws_server      *trans.WSServer
 	http_addr      string
 	beego_loglevel int
+
+	notifyManage *notify.NotifyManage
+	emailHandler *notify.EmailHandler
 )
 
 func initLog() {
@@ -83,7 +87,7 @@ func setupDB(cfg *ini.File) (err error) {
 	return
 }
 
-func setupCache(cfg *ini.File) (err error) {
+func setupRedis(cfg *ini.File) (err error) {
 	sec, err := cfg.GetSection("redis")
 	if err != nil {
 		return err
@@ -232,13 +236,91 @@ func setupHttp(cfg *ini.File) (err error) {
 	return
 }
 
+func setupNotificationEmailHandler(cfg *ini.File, sec *ini.Section) error {
+	enable := sec.Key("enable").MustBool(false)
+	smtp_label := sec.Key("smtp_server").MustString("default")
+	contact_name := sec.Key("contact_name").String()
+	templates_dir := sec.Key("templates_dir").String()
+	language := sec.Key("language").String()
+
+	smtp_sec, err := cfg.GetSection(fmt.Sprintf("stmp_server.%s", smtp_label))
+	if err != nil {
+		return err
+	}
+
+	smtp_server := notify.SmtpServer{
+		Host:     smtp_sec.Key("host").String(),
+		Port:     smtp_sec.Key("port").MustInt(0),
+		Account:  smtp_sec.Key("account").String(),
+		Password: smtp_sec.Key("password").String(),
+		UseTLS:   smtp_sec.Key("use_ttl").MustBool(false),
+	}
+
+	emailHandler = notify.NewEmailHandler()
+	emailHandler.SetEnable(enable)
+	emailHandler.SetContactName(contact_name)
+	emailHandler.SetSmtpServer(&smtp_server)
+	// init templates
+	emailHandler.Tpl.SetBaseDir(templates_dir)
+	if err := emailHandler.Tpl.LoadByLang(language, false); err != nil {
+		return err
+	}
+	return nil
+}
+
+func setupNotification(cfg *ini.File) (err error) {
+	sec, err := cfg.GetSection("notification")
+	if err != nil {
+		return err
+	}
+
+	notifyManage = notify.NewNotifyManage(0, 0)
+	enable := sec.Key("enable").MustBool(false)
+	notifyManage.SetEnable(enable)
+
+	handlers := sec.Key("handlers").Strings(utils.CFG_SEP)
+	for _, handler := range handlers {
+		handler_sec, err := cfg.GetSection(fmt.Sprintf("notification.%s", handler))
+		if err != nil {
+			continue
+		}
+		switch handler {
+		case "email":
+			if err := setupNotificationEmailHandler(cfg, handler_sec); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+
+	// TODO load from config
+	// emailHandler = notify.NewEmailHandler()
+	//
+	// smtp_server := notify.SmtpServer{
+	// 	Host:     "smtp.exmail.qq.com",
+	// 	Port:     465,
+	// 	Account:  "cydex_noreply@catontechnology.com",
+	// 	Password: "Cydex123456",
+	// 	UseTLS:   true,
+	// }
+	// emailHandler.SetSmtpServer(&smtp_server)
+	//
+	// emailHandler.Tpl.SetBaseDir("./deploy/email/templates")
+	// if err := emailHandler.Tpl.LoadByLang("zh", false); err != nil {
+	// 	return err
+	// }
+
+	return nil
+}
+
 func setupApplication(cfg *ini.File) (err error) {
 	if err = setupDB(cfg); err != nil {
 		return
 	}
-	// if err = setupCache(cfg); err != nil {
-	// 	return
-	// }
+	if err = setupRedis(cfg); err != nil {
+		return
+	}
 	if err = setupPkg(cfg); err != nil {
 		return
 	}
@@ -249,6 +331,9 @@ func setupApplication(cfg *ini.File) (err error) {
 		return
 	}
 	if err = setupHttp(cfg); err != nil {
+		return
+	}
+	if err = setupNotification(cfg); err != nil {
 		return
 	}
 	return
@@ -263,9 +348,21 @@ func run() {
 	// task.TaskMgr.AddObserver(statistics.TransferMgr)
 	// 从数据库导入track
 	pkg.JobMgr.LoadTracks()
+	// job add observer for notification
+	pkg.JobMgr.AddJobObserver(notifyManage)
 
 	go task.TaskMgr.TaskStateRoutine()
 	go ws_server.Serve()
+
+	// notification
+	if notifyManage != nil {
+		clog.Info("Notification start")
+		go notifyManage.Serve()
+	}
+	if emailHandler != nil {
+		clog.Info("Notification email handler start")
+		emailHandler.Start()
+	}
 
 	beego.SetLevel(beego_loglevel)
 	go beego.Run(http_addr)
