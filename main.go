@@ -51,6 +51,24 @@ func initLog() {
 	}
 }
 
+func setupUserDB(cfg *ini.File) (err error) {
+	// 连接User数据库
+	clog.Info("setup user db")
+	sec, err := cfg.GetSection("user_db")
+	if err != nil {
+		return err
+	}
+	driver := sec.Key("driver").String()
+	source := sec.Key("source").String()
+	show_sql := sec.Key("show_sql").MustBool()
+	clog.Infof("[setup db] url:'%s %s' show_sql:%t", driver, source, show_sql)
+	if err = db.CreateUserEngine(driver, source, show_sql); err != nil {
+		return
+	}
+
+	return
+}
+
 func setupDB(cfg *ini.File) (err error) {
 	// 创建数据库
 	clog.Info("setup db")
@@ -234,6 +252,9 @@ func setupHttp(cfg *ini.File) (err error) {
 
 func setupApplication(cfg *ini.File) (err error) {
 	if err = setupDB(cfg); err != nil {
+		return
+	}
+	if err = setupUserDB(cfg); err != nil {
 		return
 	}
 	// if err = setupCache(cfg); err != nil {
