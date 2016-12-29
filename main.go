@@ -35,8 +35,7 @@ var (
 	http_addr      string
 	beego_loglevel int
 
-	notifyManage *notify.NotifyManage
-	emailHandler *notify.EmailHandler
+	// notifyManage *notify.NotifyManage
 )
 
 func initLog() {
@@ -53,6 +52,24 @@ func initLog() {
 		clog.ReplaceLogger(logger)
 		break
 	}
+}
+
+func setupUserDB(cfg *ini.File) (err error) {
+	// 连接User数据库
+	clog.Info("setup user db")
+	sec, err := cfg.GetSection("user_db")
+	if err != nil {
+		return err
+	}
+	driver := sec.Key("driver").String()
+	source := sec.Key("source").String()
+	show_sql := sec.Key("show_sql").MustBool()
+	clog.Infof("[setup db] url:'%s %s' show_sql:%t", driver, source, show_sql)
+	if err = db.CreateUserEngine(driver, source, show_sql); err != nil {
+		return
+	}
+
+	return
 }
 
 func setupDB(cfg *ini.File) (err error) {
@@ -243,26 +260,26 @@ func setupNotificationEmailHandler(cfg *ini.File, sec *ini.Section) error {
 	templates_dir := sec.Key("templates_dir").String()
 	language := sec.Key("language").String()
 
-	smtp_sec, err := cfg.GetSection(fmt.Sprintf("stmp_server.%s", smtp_label))
+	smtp_sec, err := cfg.GetSection(fmt.Sprintf("smtp_server.%s", smtp_label))
 	if err != nil {
 		return err
 	}
 
 	smtp_server := notify.SmtpServer{
+		Label:    smtp_label,
 		Host:     smtp_sec.Key("host").String(),
 		Port:     smtp_sec.Key("port").MustInt(0),
 		Account:  smtp_sec.Key("account").String(),
 		Password: smtp_sec.Key("password").String(),
-		UseTLS:   smtp_sec.Key("use_ttl").MustBool(false),
+		UseTLS:   smtp_sec.Key("use_tls").MustBool(false),
 	}
 
-	emailHandler = notify.NewEmailHandler()
-	emailHandler.SetEnable(enable)
-	emailHandler.SetContactName(contact_name)
-	emailHandler.SetSmtpServer(&smtp_server)
+	notify.Email.SetEnable(enable)
+	notify.Email.SetContactName(contact_name)
+	notify.Email.SetSmtpServer(&smtp_server)
 	// init templates
-	emailHandler.Tpl.SetBaseDir(templates_dir)
-	if err := emailHandler.Tpl.LoadByLang(language, false); err != nil {
+	notify.Email.Tpl.SetBaseDir(templates_dir)
+	if err := notify.Email.Tpl.LoadByLang(language, false); err != nil {
 		return err
 	}
 	return nil
@@ -274,9 +291,8 @@ func setupNotification(cfg *ini.File) (err error) {
 		return err
 	}
 
-	notifyManage = notify.NewNotifyManage(0, 0)
 	enable := sec.Key("enable").MustBool(false)
-	notifyManage.SetEnable(enable)
+	notify.Manage.SetEnable(enable)
 
 	handlers := sec.Key("handlers").Strings(utils.CFG_SEP)
 	for _, handler := range handlers {
@@ -318,6 +334,9 @@ func setupApplication(cfg *ini.File) (err error) {
 	if err = setupDB(cfg); err != nil {
 		return
 	}
+	if err = setupUserDB(cfg); err != nil {
+		return
+	}
 	if err = setupRedis(cfg); err != nil {
 		return
 	}
@@ -349,20 +368,16 @@ func run() {
 	// 从数据库导入track
 	pkg.JobMgr.LoadTracks()
 	// job add observer for notification
-	pkg.JobMgr.AddJobObserver(notifyManage)
+	pkg.JobMgr.AddJobObserver(notify.Manage)
 
 	go task.TaskMgr.TaskStateRoutine()
 	go ws_server.Serve()
 
-	// notification
-	if notifyManage != nil {
-		clog.Info("Notification start")
-		go notifyManage.Serve()
-	}
-	if emailHandler != nil {
-		clog.Info("Notification email handler start")
-		emailHandler.Start()
-	}
+	clog.Info("Notification start")
+	go notify.Manage.Serve()
+
+	clog.Info("Notification email handler start")
+	notify.Email.Start()
 
 	beego.SetLevel(beego_loglevel)
 	go beego.Run(http_addr)

@@ -22,14 +22,22 @@ import (
 
 const (
 	DefaultEmailTemplateDir  = "/opt/cydex/etc/ts.d/email/templates"
-	DefaultMaxEmailProcesser = 100
+	DefaultMaxEmailProcesser = 20
 	ContentType              = "text/html; charset=UTF-8"
 )
 
 var (
+	Email *EmailHandler
+
 	HeadersOrder = []string{"To", "From", "Subject", "Content-Type"}
 	TplFuncs     = template.FuncMap{"DatetimeFormat": DatetimeFormat}
+
+	SmtpLabels = []string{"default", "1", "2", "3"}
 )
+
+func init() {
+	Email = NewEmailHandler()
+}
 
 type PkgEvMailContext struct {
 	TargetUser *cydex.User // 邮件发送目标用户
@@ -43,21 +51,21 @@ func NewPkgEvMailContext(pkg_ev *PkgEvent) *PkgEvMailContext {
 	o := new(PkgEvMailContext)
 	o.PkgEvent = pkg_ev
 
-	// TODO for test
-	pkg_ev.User = &cydex.User{
-		Username: "receiver",
-		Email:    "40744134@qq.com",
-		EmailNotificationMask: 0xff,
-	}
-	pkg_ev.Owner = &cydex.User{
-		Username: "sender",
-		Email:    "40744134@qq.com",
-		EmailNotificationMask: 0xff,
-	}
-	if pkg_ev.Job.Type == cydex.UPLOAD {
-		pkg_ev.User = pkg_ev.Owner
-	}
-	// end for test
+	// // TODO for test
+	// pkg_ev.User = &cydex.User{
+	// 	Username: "receiver",
+	// 	Email:    "40744134@qq.com",
+	// 	EmailNotificationMask: 0xff,
+	// }
+	// pkg_ev.Owner = &cydex.User{
+	// 	Username: "sender",
+	// 	Email:    "40744134@qq.com",
+	// 	EmailNotificationMask: 0xff,
+	// }
+	// if pkg_ev.Job.Type == cydex.UPLOAD {
+	// 	pkg_ev.User = pkg_ev.Owner
+	// }
+	// // end for test
 
 	switch pkg_ev.NotifyType {
 	case cydex.NotifyToReceiverNewPkg, cydex.NotifyToReceiverPkgDownloadFinish:
@@ -101,6 +109,8 @@ func (self *EmailTemplateManage) LoadByLang(lang string, reload bool) error {
 	if lang == self.Lang && !reload {
 		return nil
 	}
+
+	clog.Infof("[mail handler] load templates lang:%s reload:%t", lang, reload)
 
 	self.lock.Lock()
 	defer self.lock.Unlock()
@@ -182,13 +192,16 @@ func (self *EmailTemplateManage) RenderContent(wr io.Writer, ctx *PkgEvMailConte
 }
 
 // smtp服务器
-type SmtpServer struct {
-	Host     string // smtp服务地址
-	Port     int    // smtp服务端口
-	Account  string // 账号
-	Password string // 密码
-	UseTLS   bool   // 是否使用TLS连接
-}
+type SmtpServer cydex.EmailSmtpServer
+
+// type SmtpServer struct {
+// 	cydex.EmailSmtpServer
+// 	// Host     string // smtp服务地址
+// 	// Port     int    // smtp服务端口
+// 	// Account  string // 账号
+// 	// Password string // 密码
+// 	// UseTLS   bool   // 是否使用TLS连接
+// }
 
 type EmailHandler struct {
 	ContactName string // 联系人名字, 发件人的名字, 如为空，取Account
@@ -217,7 +230,7 @@ func NewEmailHandlerEx(tpl_base_dir string, contact_name string, max_processer i
 		contact_name = "cydex_noreply"
 	}
 	o.ContactName = contact_name
-	o.Enable = False
+	o.Enable = false
 
 	return o
 }
@@ -235,11 +248,25 @@ func (self *EmailHandler) SetSmtpServer(cfg *SmtpServer) error {
 	return nil
 }
 
+func (self *EmailHandler) SmtpServer() *SmtpServer {
+	self.lock.RLock()
+	defer self.lock.RUnlock()
+	return self.smtp_server
+}
+
 func (self *EmailHandler) SetContactName(name string) {
 	self.lock.Lock()
 	defer self.lock.Unlock()
 	self.ContactName = name
 	clog.Infof("[mail handler] set contact name: %s", name)
+}
+
+func (self *EmailHandler) Language() string {
+	return self.Tpl.Lang
+}
+
+func (self *EmailHandler) SetLanguage(lang string) error {
+	return self.Tpl.LoadByLang(lang, false)
 }
 
 func (self *EmailHandler) Start() {
@@ -265,13 +292,8 @@ func (self *EmailHandler) ServeSubscribe() {
 func (self *EmailHandler) ServeEvent() {
 	sem := make(chan int, self.max_ev_processer)
 	for ev := range self.pkg_ev_queue {
-		select {
-		case sem <- 1:
-		default:
-			clog.Warnf("[email handler] too busy!")
-			continue
-		}
 		ev := ev
+		sem <- 1
 		go func() {
 			self.handlePkgEvent(ev)
 			<-sem

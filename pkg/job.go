@@ -713,20 +713,20 @@ func (self *JobManager) ProcessJob(jobid string) {
 				self.lock.Lock()
 				delete(self.jobs, jobid)
 				self.DelTrack(job.Uid, job.Pid, job.Type, false)
-				for _, o := range self.job_observers {
-					o.OnJobFinish(job)
-				}
 				self.lock.Unlock()
 			}()
 		} else {
 			self.lock.Lock()
 			delete(self.jobs, jobid)
 			self.DelTrack(job.Uid, job.Pid, job.Type, false)
-			for _, o := range self.job_observers {
-				o.OnJobFinish(job)
-			}
 			self.lock.Unlock()
 		}
+
+		self.lock.Lock()
+		for _, o := range self.job_observers {
+			o.OnJobFinish(job)
+		}
+		self.lock.Unlock()
 	}
 }
 

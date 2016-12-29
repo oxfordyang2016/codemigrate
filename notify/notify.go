@@ -3,6 +3,7 @@ package notify
 import (
 	// "./../pkg"
 	pkg_model "./../pkg/models"
+	user_model "./../user/models"
 	"./../utils"
 	"./../utils/cache"
 	"cydex"
@@ -22,6 +23,8 @@ const (
 )
 
 var (
+	Manage *NotifyManage
+
 	NotifyEvents = []int{
 		cydex.NotifyToReceiverNewPkg,
 		cydex.NotifyToSenderPkgUploadFinish,
@@ -30,6 +33,10 @@ var (
 		cydex.NotifyToSenderPkgDownloadFinish,
 	}
 )
+
+func init() {
+	Manage = NewNotifyManage(0, 0)
+}
 
 type JobInfo struct {
 	JobId    string
@@ -239,18 +246,35 @@ func (self *NotifyManage) fetchJobInfo(pkg_ev *PkgEvent) error {
 	}
 	pkg_ev.Pkg.HumanSize = utils.GetHumanSize(pkg_ev.Pkg.Size)
 
-	// TODO get user by job.Uid
+	// get user by job.Uid
+	user_profile, err := user_model.GetUserProfile(pkg_ev.Job.Uid)
+	if err != nil {
+		return err
+	}
+	pkg_ev.User = &cydex.User{
+		Username: user_profile.User.Username,
+		Email:    user_profile.User.Email,
+		EmailNotificationMask: 0xff, // TODO
+	}
 
 	if pkg_ev.Job.Type == cydex.UPLOAD {
 		pkg_ev.Owner = pkg_ev.User
 	} else {
 		upload_jobs, err := pkg_model.GetJobsByPid(pid, cydex.UPLOAD, nil)
-		if err != nil || upload_jobs == nil {
+		if err != nil || len(upload_jobs) != 1 {
 			return err
 		}
 		upload_job := upload_jobs[0]
-		// TODO get owner by upload_job.Uid
-		upload_job = upload_job
+		// get owner by upload_job.Uid
+		user_profile, err := user_model.GetUserProfile(upload_job.Uid)
+		if err != nil {
+			return err
+		}
+		pkg_ev.Owner = &cydex.User{
+			Username: user_profile.User.Username,
+			Email:    user_profile.User.Email,
+			EmailNotificationMask: 0xff, // TODO
+		}
 	}
 	return nil
 }
