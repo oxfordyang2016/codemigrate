@@ -258,7 +258,6 @@ func setupNotificationEmailHandler(cfg *ini.File, sec *ini.Section) error {
 	smtp_label := sec.Key("smtp_server").MustString("default")
 	contact_name := sec.Key("contact_name").String()
 	templates_dir := sec.Key("templates_dir").String()
-	language := sec.Key("language").String()
 
 	smtp_sec, err := cfg.GetSection(fmt.Sprintf("smtp_server.%s", smtp_label))
 	if err != nil {
@@ -277,9 +276,9 @@ func setupNotificationEmailHandler(cfg *ini.File, sec *ini.Section) error {
 	notify.Email.SetEnable(enable)
 	notify.Email.SetContactName(contact_name)
 	notify.Email.SetSmtpServer(&smtp_server)
-	// init templates
-	notify.Email.Tpl.SetBaseDir(templates_dir)
-	if err := notify.Email.Tpl.LoadByLang(language, false); err != nil {
+	notify.Email.SetTemplateBaseDir(templates_dir)
+	// load templates
+	if err := notify.Email.LoadTemplates(); err != nil {
 		return err
 	}
 	return nil

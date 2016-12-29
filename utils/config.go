@@ -88,11 +88,6 @@ func (self *Config) SaveEmailInfo(email *cydex.EmailInfo) error {
 			return err
 		}
 	}
-	if email.Language != nil {
-		if _, err = sec.NewKey("language", fmt.Sprintf("%s", *email.Language)); err != nil {
-			return err
-		}
-	}
 	if email.SmtpServer != nil {
 		if _, err = sec.NewKey("smtp_server", fmt.Sprintf("%s", *email.SmtpServer)); err != nil {
 			return err

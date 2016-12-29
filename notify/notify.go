@@ -252,9 +252,10 @@ func (self *NotifyManage) fetchJobInfo(pkg_ev *PkgEvent) error {
 		return err
 	}
 	pkg_ev.User = &cydex.User{
-		Username: user_profile.User.Username,
-		Email:    user_profile.User.Email,
-		EmailNotificationMask: 0xff, // TODO
+		Username:     user_profile.User.Username,
+		Email:        user_profile.User.Email,
+		EmailAffairs: user_profile.EmailAffairs,
+		Language:     user_profile.Language,
 	}
 
 	if pkg_ev.Job.Type == cydex.UPLOAD {
@@ -271,9 +272,10 @@ func (self *NotifyManage) fetchJobInfo(pkg_ev *PkgEvent) error {
 			return err
 		}
 		pkg_ev.Owner = &cydex.User{
-			Username: user_profile.User.Username,
-			Email:    user_profile.User.Email,
-			EmailNotificationMask: 0xff, // TODO
+			Username:     user_profile.User.Username,
+			Email:        user_profile.User.Email,
+			EmailAffairs: user_profile.EmailAffairs,
+			Language:     user_profile.Language,
 		}
 	}
 	return nil

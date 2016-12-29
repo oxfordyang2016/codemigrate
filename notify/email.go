@@ -31,13 +31,15 @@ var (
 
 	HeadersOrder = []string{"To", "From", "Subject", "Content-Type"}
 	TplFuncs     = template.FuncMap{"DatetimeFormat": DatetimeFormat}
-
-	SmtpLabels = []string{"default", "1", "2", "3"}
+	SmtpLabels   = []string{"default", "1", "2", "3"}
 )
 
 func init() {
 	Email = NewEmailHandler()
 }
+
+// smtp服务器
+type SmtpServer cydex.EmailSmtpServer
 
 type PkgEvMailContext struct {
 	TargetUser *cydex.User // 邮件发送目标用户
@@ -51,21 +53,23 @@ func NewPkgEvMailContext(pkg_ev *PkgEvent) *PkgEvMailContext {
 	o := new(PkgEvMailContext)
 	o.PkgEvent = pkg_ev
 
-	// // TODO for test
+	// TODO for test
 	// pkg_ev.User = &cydex.User{
-	// 	Username: "receiver",
-	// 	Email:    "40744134@qq.com",
-	// 	EmailNotificationMask: 0xff,
+	// 	Username:     "receiver",
+	// 	Email:        "40744134@qq.com",
+	// 	EmailAffairs: 0xff,
+	// 	Language:     0,
 	// }
 	// pkg_ev.Owner = &cydex.User{
-	// 	Username: "sender",
-	// 	Email:    "40744134@qq.com",
-	// 	EmailNotificationMask: 0xff,
+	// 	Username:     "sender",
+	// 	Email:        "40744134@qq.com",
+	// 	EmailAffairs: 0xff,
+	// 	Language:     1,
 	// }
 	// if pkg_ev.Job.Type == cydex.UPLOAD {
 	// 	pkg_ev.User = pkg_ev.Owner
 	// }
-	// // end for test
+	// end for test
 
 	switch pkg_ev.NotifyType {
 	case cydex.NotifyToReceiverNewPkg, cydex.NotifyToReceiverPkgDownloadFinish:
@@ -78,38 +82,30 @@ func NewPkgEvMailContext(pkg_ev *PkgEvent) *PkgEvMailContext {
 }
 
 // Email模板管理
-type EmailTemplateManage struct {
+type EmailTemplate struct {
 	BaseDir      string
-	Lang         string
+	Lang         int
 	lock         sync.RWMutex
-	subject_tpls map[int]*template.Template
-	content_tpls map[int]*template.Template
+	subject_tpls map[int]*template.Template // int:NotifyType
+	content_tpls map[int]*template.Template // int:NotifyType
 }
 
-func NewEmailTemplateManage(base_dir string) *EmailTemplateManage {
-	o := new(EmailTemplateManage)
-	o.SetBaseDir(base_dir)
+func NewEmailTemplate(base_dir string) *EmailTemplate {
+	o := new(EmailTemplate)
+	o.BaseDir = base_dir
 	o.subject_tpls = make(map[int]*template.Template)
 	o.content_tpls = make(map[int]*template.Template)
+	o.Lang = -1
 	return o
 }
 
-func (self *EmailTemplateManage) SetBaseDir(base_dir string) {
-	self.lock.Lock()
-	defer self.lock.Unlock()
-
-	if base_dir == "" {
-		base_dir = DefaultEmailTemplateDir
-	}
-	self.BaseDir = base_dir
-}
-
 // 按照语言导入模板
-func (self *EmailTemplateManage) LoadByLang(lang string, reload bool) error {
-	if lang == self.Lang && !reload {
+func (self *EmailTemplate) LoadByLang(lang_idx int, reload bool) error {
+	if lang_idx == self.Lang && !reload {
 		return nil
 	}
 
+	lang := cydex.LanguageStrs[lang_idx]
 	clog.Infof("[mail handler] load templates lang:%s reload:%t", lang, reload)
 
 	self.lock.Lock()
@@ -128,11 +124,11 @@ func (self *EmailTemplateManage) LoadByLang(lang string, reload bool) error {
 	if err := self.loadContent(lang, base); err != nil {
 		return err
 	}
-	self.Lang = lang
+	self.Lang = lang_idx
 	return nil
 }
 
-func (self *EmailTemplateManage) loadSubject(lang string) error {
+func (self *EmailTemplate) loadSubject(lang string) error {
 	var err error
 	for _, v := range NotifyEvents {
 		file := filepath.Join(self.BaseDir, lang, fmt.Sprintf("subject_%d.tpl", v))
@@ -145,7 +141,7 @@ func (self *EmailTemplateManage) loadSubject(lang string) error {
 	return nil
 }
 
-func (self *EmailTemplateManage) loadContent(lang string, base *template.Template) error {
+func (self *EmailTemplate) loadContent(lang string, base *template.Template) error {
 	var err error
 	for _, v := range NotifyEvents {
 		file := filepath.Join(self.BaseDir, lang, fmt.Sprintf("content_%d.tpl", v))
@@ -162,7 +158,7 @@ func (self *EmailTemplateManage) loadContent(lang string, base *template.Templat
 }
 
 // 渲染标题
-func (self *EmailTemplateManage) RenderSubject(wr io.Writer, ctx *PkgEvMailContext) error {
+func (self *EmailTemplate) RenderSubject(wr io.Writer, ctx *PkgEvMailContext) error {
 	if wr == nil || ctx == nil {
 		return errors.New("Value Error")
 	}
@@ -177,7 +173,7 @@ func (self *EmailTemplateManage) RenderSubject(wr io.Writer, ctx *PkgEvMailConte
 }
 
 // 渲染内容
-func (self *EmailTemplateManage) RenderContent(wr io.Writer, ctx *PkgEvMailContext) error {
+func (self *EmailTemplate) RenderContent(wr io.Writer, ctx *PkgEvMailContext) error {
 	if wr == nil || ctx == nil {
 		return errors.New("Value Error")
 	}
@@ -191,9 +187,6 @@ func (self *EmailTemplateManage) RenderContent(wr io.Writer, ctx *PkgEvMailConte
 	return tpl.Execute(wr, ctx)
 }
 
-// smtp服务器
-type SmtpServer cydex.EmailSmtpServer
-
 // type SmtpServer struct {
 // 	cydex.EmailSmtpServer
 // 	// Host     string // smtp服务地址
@@ -206,8 +199,9 @@ type SmtpServer cydex.EmailSmtpServer
 type EmailHandler struct {
 	ContactName string // 联系人名字, 发件人的名字, 如为空，取Account
 	Enable      bool
-	Tpl         *EmailTemplateManage
+	templates   map[int]*EmailTemplate
 
+	tpl_base_dir     string
 	smtp_server      *SmtpServer
 	pkg_ev_queue     chan *PkgEvent
 	max_ev_processer int
@@ -220,7 +214,7 @@ func NewEmailHandler() *EmailHandler {
 
 func NewEmailHandlerEx(tpl_base_dir string, contact_name string, max_processer int) *EmailHandler {
 	o := new(EmailHandler)
-	o.Tpl = NewEmailTemplateManage(tpl_base_dir)
+	o.templates = make(map[int]*EmailTemplate)
 	o.pkg_ev_queue = make(chan *PkgEvent)
 	if max_processer <= 0 {
 		max_processer = DefaultMaxEmailProcesser
@@ -230,6 +224,7 @@ func NewEmailHandlerEx(tpl_base_dir string, contact_name string, max_processer i
 		contact_name = "cydex_noreply"
 	}
 	o.ContactName = contact_name
+	o.SetTemplateBaseDir(tpl_base_dir)
 	o.Enable = false
 
 	return o
@@ -261,12 +256,32 @@ func (self *EmailHandler) SetContactName(name string) {
 	clog.Infof("[mail handler] set contact name: %s", name)
 }
 
-func (self *EmailHandler) Language() string {
-	return self.Tpl.Lang
+func (self *EmailHandler) SetTemplateBaseDir(base_dir string) {
+	if base_dir == "" {
+		base_dir = DefaultEmailTemplateDir
+	}
+
+	self.lock.Lock()
+	defer self.lock.Unlock()
+	self.tpl_base_dir = base_dir
 }
 
-func (self *EmailHandler) SetLanguage(lang string) error {
-	return self.Tpl.LoadByLang(lang, false)
+func (self *EmailHandler) LoadTemplates() error {
+	self.lock.Lock()
+	defer self.lock.Unlock()
+
+	basedir := self.tpl_base_dir
+	for i := 0; i < cydex.LanguageLast; i++ {
+		tpl := NewEmailTemplate(basedir)
+		if err := tpl.LoadByLang(i, true); err != nil {
+			continue
+		}
+		self.templates[i] = tpl
+	}
+	if len(self.templates) == 0 {
+		return errors.New("No templates loaded")
+	}
+	return nil
 }
 
 func (self *EmailHandler) Start() {
@@ -320,8 +335,19 @@ func (self *EmailHandler) handleRedisMsg(msg *redis.Message) error {
 	return nil
 }
 
+// 根据lang_idx获取模板，fallback表示如果失败，使用en
+func (self *EmailHandler) getTemplate(lang_idx int, fallback bool) *EmailTemplate {
+	var tpl *EmailTemplate
+	tpl, _ = self.templates[lang_idx]
+	if tpl == nil && fallback {
+		lang_idx = 0
+		tpl, _ = self.templates[lang_idx]
+	}
+	return tpl
+}
+
 func (self *EmailHandler) handlePkgEvent(pkg_ev *PkgEvent) {
-	if self.Tpl == nil || self.smtp_server == nil {
+	if self.smtp_server == nil {
 		return
 	}
 
@@ -330,25 +356,31 @@ func (self *EmailHandler) handlePkgEvent(pkg_ev *PkgEvent) {
 		clog.Errorf("[mail handler] Invalid mail context")
 		return
 	}
-	if mail_ctx.TargetUser.EmailNotificationMask&(1<<uint(pkg_ev.NotifyType)) == 0 {
-		clog.Warnf("[mail handler] user %s (mask:0x%x), is not registed this event: %d", mail_ctx.TargetUser.Username, mail_ctx.TargetUser.EmailNotificationMask, pkg_ev.NotifyType)
+	if mail_ctx.TargetUser.EmailAffairs&(1<<uint(pkg_ev.NotifyType)) == 0 {
+		clog.Warnf("[mail handler] user %s (mask:0x%x), is not registed this event: %d", mail_ctx.TargetUser.Username, mail_ctx.TargetUser.EmailAffairs, pkg_ev.NotifyType)
 		return
 	}
 
 	self.lock.RLock()
 	smtp_server := *self.smtp_server
+	tpl := self.getTemplate(mail_ctx.TargetUser.Language, true)
 	self.lock.RUnlock()
+
+	if tpl == nil {
+		clog.Errorf("[mail handler] no template found by lang:%d", mail_ctx.TargetUser.Language)
+		return
+	}
 
 	// render subject and content
 	var (
 		subject bytes.Buffer
 		content bytes.Buffer
 	)
-	if err := self.Tpl.RenderSubject(&subject, mail_ctx); err != nil {
+	if err := tpl.RenderSubject(&subject, mail_ctx); err != nil {
 		clog.Error("render subject ", err)
 		return
 	}
-	if err := self.Tpl.RenderContent(&content, mail_ctx); err != nil {
+	if err := tpl.RenderContent(&content, mail_ctx); err != nil {
 		clog.Error("render content ", err)
 		return
 	}

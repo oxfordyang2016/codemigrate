@@ -26,7 +26,6 @@ func (self *EmailController) Get() {
 		return
 	}
 
-	lang := notify.Email.Language()
 	var label string
 	smtp_server := notify.Email.SmtpServer()
 	if smtp_server != nil {
@@ -36,7 +35,6 @@ func (self *EmailController) Get() {
 	rsp.Email = &cydex.EmailInfo{
 		Enable:      &notify.Email.Enable,
 		ContactName: &notify.Email.ContactName,
-		Language:    &lang,
 		SmtpServer:  &label,
 	}
 }
@@ -63,12 +61,6 @@ func (self *EmailController) Put() {
 	}
 
 	// setup
-	if req.Language != nil {
-		if err := notify.Email.SetLanguage(*req.Language); err != nil {
-			rsp.Error = cydex.ErrInnerServer
-			return
-		}
-	}
 	if req.Enable != nil {
 		notify.Email.SetEnable(*req.Enable)
 	}
@@ -137,8 +129,7 @@ func (self *EmailTemplatesController) Post() {
 		return
 	}
 
-	lang := notify.Email.Tpl.Lang
-	if err := notify.Email.Tpl.LoadByLang(lang, true); err != nil {
+	if err := notify.Email.LoadTemplates(); err != nil {
 		rsp.Error = cydex.ErrInnerServer
 		return
 	}
@@ -273,5 +264,20 @@ func (self *EmailSmtpController) Post() {
 	if err := utils.DefaultConfig().SaveEmailSmtpServer(req, label); err != nil {
 		rsp.Error = cydex.ErrInnerServer
 		return
+	}
+
+	// jzh: 如果EmailHandler的当前smtp_server是修改的这个，需要重新设置一下
+	var cur_label string
+	smtp_server := notify.Email.SmtpServer()
+	if smtp_server != nil {
+		cur_label = smtp_server.Label
+	}
+	if cur_label == label {
+		clog.Infof("The smtp server is being used by email handler, should be setup!")
+		if err := notify.Email.SetSmtpServer((*notify.SmtpServer)(req)); err != nil {
+			clog.Errorf("Set smtp server failed after modified the smtp config, %s", err.Error())
+			rsp.Error = cydex.ErrInnerServer
+			return
+		}
 	}
 }

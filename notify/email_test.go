@@ -8,9 +8,10 @@ import (
 	"time"
 )
 
-func Test_EmailTemplateManage(t *testing.T) {
-	etm := NewEmailTemplateManage("")
-	Convey("Test EmailTemplateManage", t, func() {
+func Test_EmailTemplate(t *testing.T) {
+	etm := NewEmailTemplate("")
+
+	Convey("Test EmailTemplate", t, func() {
 		Convey("set base dir", func() {
 			So(etm.BaseDir, ShouldEqual, "/opt/cydex/etc/ts.d/email/templates")
 			etm.SetBaseDir("/tmp/email/templates")
@@ -23,11 +24,11 @@ func Test_EmailTemplateManage(t *testing.T) {
 			etm.SetBaseDir("./../deploy/email/templates")
 
 			var err error
-			err = etm.LoadByLang("zh", false)
+			err = etm.LoadByLang(cydex.LanguageEn, false)
 			So(err, ShouldBeNil)
-			err = etm.LoadByLang("en", false)
+			err = etm.LoadByLang(cydex.LanguageZh, false)
 			So(err, ShouldBeNil)
-			err = etm.LoadByLang("en", false)
+			err = etm.LoadByLang(cydex.LanguageEn, false)
 			So(err, ShouldBeNil)
 		})
 		Convey("render subject", func() {

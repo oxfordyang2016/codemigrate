@@ -6,7 +6,7 @@
 
 ## 设置
 ```
-    curl -H "x-cydex-userlevel:9" -H "content-type: application/json" -X POST -d '{"enable":true, "language":"zh", "contact_name":"bbb"}' http://127.0.0.1:9000/api/v1/notification/email
+    curl -H "x-cydex-userlevel:9" -H "content-type: application/json" -X POST -d '{"enable":true, "contact_name":"bbb", "smtp_server":"1"}' http://127.0.0.1:9000/api/v1/notification/email
 ```
 
 ## 获取smtp服务器列表
