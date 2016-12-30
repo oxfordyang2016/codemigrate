@@ -1,5 +1,6 @@
-2016-12-22 v0.1.2-alpha zh.jin <zh.jin@catontechnology.com>
+2016-12-22 v0.2.0 zh.jin <zh.jin@catontechnology.com>
 	* cdxs-3, 针对账号限速功能
+	* cdxs-11, 增加email通知功能 
 
 2016-11-22 v0.1.1-alpha zh.jin <zh.jin@catontechnology.com>
 	* old-cdxs-13, 查询包裹支持分页功能

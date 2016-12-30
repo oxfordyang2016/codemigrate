@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	VERSION = "0.1.2-alpha"
+	VERSION = "0.2.0"
 )
 
 const (
