@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	VERSION = "0.1.2-alpha"
+	VERSION = "0.2.0"
 )
 
 const (
@@ -34,8 +34,6 @@ var (
 	ws_server      *trans.WSServer
 	http_addr      string
 	beego_loglevel int
-
-	// notifyManage *notify.NotifyManage
 )
 
 func initLog() {
@@ -306,25 +304,6 @@ func setupNotification(cfg *ini.File) (err error) {
 			}
 		}
 	}
-
-	return nil
-
-	// TODO load from config
-	// emailHandler = notify.NewEmailHandler()
-	//
-	// smtp_server := notify.SmtpServer{
-	// 	Host:     "smtp.exmail.qq.com",
-	// 	Port:     465,
-	// 	Account:  "cydex_noreply@catontechnology.com",
-	// 	Password: "Cydex123456",
-	// 	UseTLS:   true,
-	// }
-	// emailHandler.SetSmtpServer(&smtp_server)
-	//
-	// emailHandler.Tpl.SetBaseDir("./deploy/email/templates")
-	// if err := emailHandler.Tpl.LoadByLang("zh", false); err != nil {
-	// 	return err
-	// }
 
 	return nil
 }

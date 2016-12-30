@@ -266,12 +266,12 @@ func (self *EmailSmtpController) Post() {
 		return
 	}
 
-	// jzh: 如果EmailHandler的当前smtp_server是修改的这个，需要重新设置一下
 	var cur_label string
 	smtp_server := notify.Email.SmtpServer()
 	if smtp_server != nil {
 		cur_label = smtp_server.Label
 	}
+	// jzh: 如果EmailHandler的当前smtp_server是修改的这个，需要重新设置一下
 	if cur_label == label {
 		clog.Infof("The smtp server is being used by email handler, should be setup!")
 		if err := notify.Email.SetSmtpServer((*notify.SmtpServer)(req)); err != nil {
