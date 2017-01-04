@@ -205,6 +205,10 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 	// bitrate stuff
 	maxbitrate := req.MaxBitrate
 	max_bps, _ := self.fetchUserMaxBitrate(cydex.DOWNLOAD)
+	// NOTE: 客户端请求的maxbitrate可能为0, 此时要取账号限速
+	if maxbitrate == 0 {
+		maxbitrate = max_bps
+	}
 	if max_bps > 0 && max_bps < maxbitrate {
 		maxbitrate = max_bps
 	}

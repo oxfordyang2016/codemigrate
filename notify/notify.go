@@ -160,6 +160,11 @@ func (self *NotifyManage) OnJobFinish(job *pkg_model.Job) {
 		return
 	}
 
+	// cdxs-13
+	if job.FinishedTimes > 1 {
+		return
+	}
+
 	// 自己传输完毕
 	var notify_type int
 	switch job.Type {

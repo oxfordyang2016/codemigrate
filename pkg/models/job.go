@@ -13,21 +13,22 @@ const (
 )
 
 type Job struct {
-	Id       int64     `xorm:"pk autoincr"`
-	JobId    string    `xorm:"unique not null"`
-	Type     int       `xorm:"int"` // cydex.UPLOAD or cydex.DOWNLOAD
-	Pid      string    `xorm:"varchar(22) not null"`
-	Pkg      *Pkg      `xorm:"-"`
-	Uid      string    `xorm:"varchar(12) not null"`
-	CreateAt time.Time `xorm:"DateTime created"`
-	UpdateAt time.Time `xorm:"DateTime updated"`
-	SoftDel  int       `xorm:"BOOL not null default(0)"`
+	Id            int64     `xorm:"pk autoincr"`
+	JobId         string    `xorm:"unique not null"`
+	Type          int       `xorm:"int"` // cydex.UPLOAD or cydex.DOWNLOAD
+	Pid           string    `xorm:"varchar(22) not null"`
+	Pkg           *Pkg      `xorm:"-"`
+	Uid           string    `xorm:"varchar(12) not null"`
+	CreateAt      time.Time `xorm:"DateTime created"`
+	UpdateAt      time.Time `xorm:"DateTime updated"`
+	SoftDel       int       `xorm:"BOOL not null default(0)"`
+	FinishedTimes int       `xorm:"not null default(0)"`
+	State         int       `xorm:"Int not null default(0)"` //FIXME: 目前和jd状态不同步，只用于判断是否是第一次下载
 
 	// runtime usage
 	Details              map[string]*JobDetail `xorm:"-"`
 	NumUnfinishedDetails int64                 `xorm:"-"`
 	IsCached             bool                  `xorm:"-"`
-	IsTransferring       bool                  `xorm:"-"`
 }
 
 func CreateJob(jobid, uid, pid string, typ int) (*Job, error) {
@@ -220,6 +221,19 @@ func (self *Job) IsFinished() bool {
 	return n == 0
 }
 
+func (self *Job) Finish() error {
+	self.FinishedTimes++
+	self.State = cydex.TRANSFER_STATE_DONE
+	_, err := DB().Id(self.Id).Cols("finished_times", "state").Update(self)
+	return err
+}
+
+func (self *Job) SaveState(state int) error {
+	self.State = state
+	_, err := DB().Id(self.Id).Cols("state").Update(self)
+	return err
+}
+
 // 获取传输了多少数据
 func (self *Job) GetTransferedSize() (uint64, error) {
 	jds, err := GetJobDetails(self.JobId)
@@ -236,8 +250,10 @@ func (self *Job) GetTransferedSize() (uint64, error) {
 }
 
 func (self *Job) String() string {
-	return fmt.Sprintf("<Job(%s)", self.JobId)
+	return fmt.Sprintf("<Job(%s)>", self.JobId)
 }
+
+// ----------------------------------------------------------------------------- //
 
 type JobDetail struct {
 	Id              int64     `xorm:"pk autoincr"`

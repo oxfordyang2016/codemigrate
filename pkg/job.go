@@ -363,14 +363,12 @@ func (self *JobManager) AddTask(t *task.Task) {
 		jd.Save()
 	}
 
-	if job.IsCached {
-		if !job.IsTransferring {
-			job.IsTransferring = true
-			self.lock.Lock()
-			defer self.lock.Unlock()
-			for _, o := range self.job_observers {
-				o.OnJobStart(job)
-			}
+	if job.State == cydex.TRANSFER_STATE_IDLE {
+		job.SaveState(cydex.TRANSFER_STATE_DOING)
+		self.lock.Lock()
+		defer self.lock.Unlock()
+		for _, o := range self.job_observers {
+			o.OnJobStart(job)
 		}
 	}
 }
@@ -380,7 +378,7 @@ func (self *JobManager) DelTask(t *task.Task) {
 		return
 	}
 
-	// cdxs-23: task结束也要处理jd
+	// cdxs-12: JobDetail和task状态要保持一致
 	jobid := t.JobId
 	j := self.GetJob(jobid)
 	if j == nil {
@@ -390,7 +388,14 @@ func (self *JobManager) DelTask(t *task.Task) {
 	if jd == nil {
 		return
 	}
-	if jd.State != t.State {
+	if jd.State == t.State {
+		return
+	}
+
+	// NOTE: node的task会由于异常而停止，不一定带sid，所以jd也要更新。
+	// 如果task是end状态，jd不一定是，例如边上传边下时task完了，但是jd不一定完毕。
+	// end状态一般带sid，由TaskStateNotify来处理。如果不带，这边也没法处理，因为需要确认所有的segs完成才算完成
+	if t.State == cydex.TRANSFER_STATE_PAUSE {
 		jd.State = t.State
 		jd.Save()
 	}
@@ -635,6 +640,34 @@ func (self *JobManager) LoadTracks() error {
 	return nil
 }
 
+// NOTE: cdxs-13, 为job增加了FinishedTimes字段，job需要同步一下状态
+func (self *JobManager) JobsSyncState() error {
+	clog.Infof("jobs sync state")
+	jobs, err := models.GetJobs(cydex.DOWNLOAD, nil)
+	if err == nil {
+		for _, job := range jobs {
+			if job.IsFinished() {
+				if job.FinishedTimes == 0 {
+					job.Finish()
+				}
+			}
+		}
+	}
+
+	jobs, err = models.GetJobs(cydex.UPLOAD, nil)
+	if err == nil {
+		for _, job := range jobs {
+			if job.IsFinished() {
+				if job.FinishedTimes == 0 {
+					job.Finish()
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // 增加delete_track的信息
 func (self *JobManager) AddTrackOfDelete(uid string, pid string, typ int, mutex bool) {
 	if mutex {
@@ -704,6 +737,7 @@ func (self *JobManager) ProcessJob(jobid string) {
 	}
 	if self.isJobFinished(job) {
 		clog.Infof("%s is finished", jobid)
+		job.Finish()
 
 		// 延时删除track和cache
 		if self.del_job_delay > 0 {

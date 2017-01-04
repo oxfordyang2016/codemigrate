@@ -99,6 +99,12 @@ func setupDB(cfg *ini.File) (err error) {
 	caches = append(caches, trans_model.Caches...)
 	// caches = append(caches, stat_model.Caches...)
 	db.MapCache(caches)
+
+	// migrate db and data
+	clog.Infof("[setup db] migrate...")
+	pkg.JobMgr.JobsSyncState()
+	clog.Infof("[setup db] migrate ok")
+
 	return
 }
 

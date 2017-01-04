@@ -1034,6 +1034,15 @@ func (self *FileController) Get() {
 	file.Chara = file_m.EigenValue
 	file.PathAbs = file_m.PathAbs
 
+	file_m.GetSegs()
+	for _, seg_m := range file_m.Segs {
+		seg := new(cydex.Seg)
+		seg.Sid = seg_m.Sid
+		seg.SetSize(seg_m.Size)
+		seg.Status = seg_m.State
+		file.Segs = append(file.Segs, seg)
+	}
+
 	uploads_jobs, err := pkg_model.GetJobsByPid(pid, cydex.UPLOAD, nil)
 	if err != nil {
 		rsp.Error = cydex.ErrInnerServer
