@@ -27,6 +27,7 @@ type Job struct {
 	Details              map[string]*JobDetail `xorm:"-"`
 	NumUnfinishedDetails int64                 `xorm:"-"`
 	IsCached             bool                  `xorm:"-"`
+	IsTransferring       bool                  `xorm:"-"`
 }
 
 func CreateJob(jobid, uid, pid string, typ int) (*Job, error) {

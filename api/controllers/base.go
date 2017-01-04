@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"cydex"
 	"encoding/json"
 	"fmt"
 	"github.com/astaxie/beego"
@@ -18,10 +19,8 @@ var (
 
 type BaseController struct {
 	beego.Controller
-	UserLevel              int
-	Ip                     string
-	UserMaxUploadBitrate   uint64
-	UserMaxDownloadBitrate uint64
+	UserLevel int
+	Ip        string
 }
 
 func (self *BaseController) fetchUserLevel() {
@@ -39,27 +38,24 @@ func (self *BaseController) fetchIp() {
 	self.Ip = ip
 }
 
-func (self *BaseController) fetchUserMaxBitrate() {
-	v := self.Ctx.Input.Header("x-cydex-user-max-upload-bitrate")
-	if v != "" {
-		i, err := strconv.ParseUint(v, 10, 64)
-		if err == nil {
-			self.UserMaxUploadBitrate = i
-		}
+func (self *BaseController) fetchUserMaxBitrate(typ int) (uint64, error) {
+	header := ""
+	switch typ {
+	case cydex.UPLOAD:
+		header = "x-cydex-user-max-upload-bitrate"
+	case cydex.DOWNLOAD:
+		header = "x-cydex-user-max-download-bitrate"
 	}
-	v = self.Ctx.Input.Header("x-cydex-user-max-download-bitrate")
+	v := self.Ctx.Input.Header(header)
 	if v != "" {
-		i, err := strconv.ParseUint(v, 10, 64)
-		if err == nil {
-			self.UserMaxDownloadBitrate = i
-		}
+		return strconv.ParseUint(v, 10, 64)
 	}
+	return 0, nil
 }
 
 func (self *BaseController) Prepare() {
 	self.fetchUserLevel()
 	self.fetchIp()
-	self.fetchUserMaxBitrate()
 }
 
 func (self *BaseController) Finish() {

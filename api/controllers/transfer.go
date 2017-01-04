@@ -202,11 +202,13 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 		rsp.Error = cydex.ErrInnerServer
 		return
 	}
-	// get storages
+	// bitrate stuff
 	maxbitrate := req.MaxBitrate
-	if self.UserMaxDownloadBitrate > 0 && self.UserMaxDownloadBitrate < maxbitrate {
-		maxbitrate = self.UserMaxDownloadBitrate
+	max_bps, _ := self.fetchUserMaxBitrate(cydex.DOWNLOAD)
+	if max_bps > 0 && max_bps < maxbitrate {
+		maxbitrate = max_bps
 	}
+	// get storages
 	task_req := buildTaskDownloadReq(owner_uid, pid, req.Fid, req.SegIds, maxbitrate)
 	if task_req == nil {
 		rsp.Error = cydex.ErrInnerServer
@@ -232,8 +234,8 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 	rsp.Port = task_rsp.Port
 	rsp.RecomendBitrate = task_rsp.RecomendBitrate
 	// user rate limit
-	if self.UserMaxDownloadBitrate > 0 && self.UserMaxDownloadBitrate < rsp.RecomendBitrate {
-		rsp.RecomendBitrate = self.UserMaxDownloadBitrate
+	if max_bps > 0 && max_bps < rsp.RecomendBitrate {
+		rsp.RecomendBitrate = max_bps
 	}
 	for _, sid := range task_rsp.SidList {
 		seg_m, _ := pkg_model.GetSeg(sid)
@@ -249,7 +251,7 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 		}
 	}
 
-	clog.Infof("dispatch download ok, host:%s, port:%d, bps:(%d %d %d)", node.Host, task_rsp.Port, rsp.RecomendBitrate, task_rsp.RecomendBitrate, self.UserMaxDownloadBitrate)
+	clog.Infof("dispatch download ok, host:%s, port:%d, bps:(%d %d %d)", node.Host, task_rsp.Port, rsp.RecomendBitrate, task_rsp.RecomendBitrate, max_bps)
 }
 
 func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex.TransferRsp) {
@@ -294,6 +296,7 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 		clog.Errorf("%s flag is %d, detail shouldn't be nil", file_m, file_m.Flag)
 		rsp.Error = cydex.ErrInnerServer
 	}
+	max_bps, _ := self.fetchUserMaxBitrate(cydex.UPLOAD)
 
 	task_req := new(task.UploadReq)
 	task_req.JobId = jobid
@@ -344,8 +347,8 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 	rsp.Port = task_rsp.Port
 	rsp.RecomendBitrate = task_rsp.RecomendBitrate
 	// account br limit
-	if self.UserMaxUploadBitrate > 0 && self.UserMaxUploadBitrate < rsp.RecomendBitrate {
-		rsp.RecomendBitrate = self.UserMaxUploadBitrate
+	if max_bps > 0 && max_bps < rsp.RecomendBitrate {
+		rsp.RecomendBitrate = max_bps
 	}
 	for _, sid := range task_rsp.SidList {
 		seg_m, _ := pkg_model.GetSeg(sid)
@@ -361,7 +364,7 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 		}
 	}
 
-	clog.Infof("dispatch upload ok, host:%s, port:%d, bps:(%d %d %d)", node.Host, task_rsp.Port, rsp.RecomendBitrate, task_rsp.RecomendBitrate, self.UserMaxUploadBitrate)
+	clog.Infof("dispatch upload ok, host:%s, port:%d, bps:(%d %d %d)", node.Host, task_rsp.Port, rsp.RecomendBitrate, task_rsp.RecomendBitrate, max_bps)
 }
 
 // 如果有预设的public_addr, 则取之

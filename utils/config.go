@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"cydex"
+	"errors"
 	"fmt"
 	"github.com/go-ini/ini"
 	"strconv"
@@ -67,6 +69,62 @@ func (self *Config) Load() (*ini.File, error) {
 		return nil, fmt.Errorf("%s: %s", err.Error(), self.profile)
 	}
 	return ini.LooseLoad(self.profile, self.cfgfile)
+}
+
+func (self *Config) SaveEmailInfo(email *cydex.EmailInfo) error {
+	cfg, err := ini.LooseLoad(self.cfgfile)
+	if err != nil {
+		return err
+	}
+
+	sec := cfg.Section("notification.email")
+	if email.Enable != nil {
+		if _, err = sec.NewKey("enable", fmt.Sprintf("%t", *email.Enable)); err != nil {
+			return err
+		}
+	}
+	if email.ContactName != nil {
+		if _, err = sec.NewKey("contact_name", fmt.Sprintf("%s", *email.ContactName)); err != nil {
+			return err
+		}
+	}
+	if email.SmtpServer != nil {
+		if _, err = sec.NewKey("smtp_server", fmt.Sprintf("%s", *email.SmtpServer)); err != nil {
+			return err
+		}
+	}
+
+	return cfg.SaveTo(self.cfgfile)
+}
+
+func (self *Config) SaveEmailSmtpServer(v *cydex.EmailSmtpServer, label string) error {
+	if v == nil {
+		return errors.New("invalid param")
+	}
+	cfg, err := ini.LooseLoad(self.cfgfile)
+	if err != nil {
+		return err
+	}
+
+	sec := cfg.Section(fmt.Sprintf("smtp_server.%s", label))
+
+	if _, err = sec.NewKey("host", v.Host); err != nil {
+		return err
+	}
+	if _, err = sec.NewKey("port", fmt.Sprintf("%d", v.Port)); err != nil {
+		return err
+	}
+	if _, err = sec.NewKey("account", v.Account); err != nil {
+		return err
+	}
+	if _, err = sec.NewKey("password", v.Password); err != nil {
+		return err
+	}
+	if _, err = sec.NewKey("use_tls", fmt.Sprintf("%t", v.UseTLS)); err != nil {
+		return err
+	}
+
+	return cfg.SaveTo(self.cfgfile)
 }
 
 // sizestr, 例如100, 100K/k, 100M/m, 100G/g等

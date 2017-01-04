@@ -7,6 +7,7 @@ import (
 	pkg_model "./pkg/models"
 	// "./statistics"
 	// stat_model "./statistics/models"
+	"./notify"
 	trans "./transfer"
 	trans_model "./transfer/models"
 	"./transfer/task"
@@ -21,7 +22,7 @@ import (
 )
 
 const (
-	VERSION = "0.1.2-alpha"
+	VERSION = "0.2.0"
 )
 
 const (
@@ -101,7 +102,7 @@ func setupDB(cfg *ini.File) (err error) {
 	return
 }
 
-func setupCache(cfg *ini.File) (err error) {
+func setupRedis(cfg *ini.File) (err error) {
 	sec, err := cfg.GetSection("redis")
 	if err != nil {
 		return err
@@ -250,6 +251,63 @@ func setupHttp(cfg *ini.File) (err error) {
 	return
 }
 
+func setupNotificationEmailHandler(cfg *ini.File, sec *ini.Section) error {
+	enable := sec.Key("enable").MustBool(false)
+	smtp_label := sec.Key("smtp_server").MustString("default")
+	contact_name := sec.Key("contact_name").String()
+	templates_dir := sec.Key("templates_dir").String()
+
+	smtp_sec, err := cfg.GetSection(fmt.Sprintf("smtp_server.%s", smtp_label))
+	if err != nil {
+		return err
+	}
+
+	smtp_server := notify.SmtpServer{
+		Label:    smtp_label,
+		Host:     smtp_sec.Key("host").String(),
+		Port:     smtp_sec.Key("port").MustInt(0),
+		Account:  smtp_sec.Key("account").String(),
+		Password: smtp_sec.Key("password").String(),
+		UseTLS:   smtp_sec.Key("use_tls").MustBool(false),
+	}
+
+	notify.Email.SetEnable(enable)
+	notify.Email.SetContactName(contact_name)
+	notify.Email.SetSmtpServer(&smtp_server)
+	notify.Email.SetTemplateBaseDir(templates_dir)
+	// load templates
+	if err := notify.Email.LoadTemplates(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func setupNotification(cfg *ini.File) (err error) {
+	sec, err := cfg.GetSection("notification")
+	if err != nil {
+		return err
+	}
+
+	enable := sec.Key("enable").MustBool(false)
+	notify.Manage.SetEnable(enable)
+
+	handlers := sec.Key("handlers").Strings(utils.CFG_SEP)
+	for _, handler := range handlers {
+		handler_sec, err := cfg.GetSection(fmt.Sprintf("notification.%s", handler))
+		if err != nil {
+			continue
+		}
+		switch handler {
+		case "email":
+			if err := setupNotificationEmailHandler(cfg, handler_sec); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func setupApplication(cfg *ini.File) (err error) {
 	if err = setupDB(cfg); err != nil {
 		return
@@ -257,9 +315,9 @@ func setupApplication(cfg *ini.File) (err error) {
 	if err = setupUserDB(cfg); err != nil {
 		return
 	}
-	// if err = setupCache(cfg); err != nil {
-	// 	return
-	// }
+	if err = setupRedis(cfg); err != nil {
+		return
+	}
 	if err = setupPkg(cfg); err != nil {
 		return
 	}
@@ -270,6 +328,9 @@ func setupApplication(cfg *ini.File) (err error) {
 		return
 	}
 	if err = setupHttp(cfg); err != nil {
+		return
+	}
+	if err = setupNotification(cfg); err != nil {
 		return
 	}
 	return
@@ -284,9 +345,17 @@ func run() {
 	// task.TaskMgr.AddObserver(statistics.TransferMgr)
 	// 从数据库导入track
 	pkg.JobMgr.LoadTracks()
+	// job add observer for notification
+	pkg.JobMgr.AddJobObserver(notify.Manage)
 
 	go task.TaskMgr.TaskStateRoutine()
 	go ws_server.Serve()
+
+	clog.Info("Notification start")
+	go notify.Manage.Serve()
+
+	clog.Info("Notification email handler start")
+	notify.Email.Start()
 
 	beego.SetLevel(beego_loglevel)
 	go beego.Run(http_addr)

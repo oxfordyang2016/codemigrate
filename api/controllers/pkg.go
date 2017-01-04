@@ -529,8 +529,12 @@ func (self *PkgsController) Post() {
 		return
 	}
 	for _, f := range req.Files {
-		f.Size, _ = strconv.ParseUint(f.SizeStr, 10, 64)
-		clog.Trace(f.Size)
+		var err error
+		f.Size, err = strconv.ParseUint(f.SizeStr, 10, 64)
+		if err != nil {
+			rsp.Error = cydex.ErrInvalidParam
+			return
+		}
 	}
 
 	self.createPkg(req, rsp)
