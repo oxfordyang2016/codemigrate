@@ -391,6 +391,10 @@ func (self *JobManager) DelTask(t *task.Task) {
 	if jd.State == t.State {
 		return
 	}
+	// NOTE: 有发生task超时，但客户端会重发请求并完成了传输，所以不允许超时task更改该状态
+	if jd.State == cydex.TRANSFER_STATE_DONE {
+		return
+	}
 
 	// NOTE: node的task会由于异常而停止，不一定带sid，所以jd也要更新。
 	// 如果task是end状态，jd不一定是，例如边上传边下时task完了，但是jd不一定完毕。

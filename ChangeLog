@@ -1,3 +1,6 @@
+2017-01-09 v0.2.1 zh.jin <zh.jin@catontechnology.com>
+	* cdxs-12, 修复超时task会更改JD的已完成状态
+
 2016-12-22 v0.2.0 zh.jin <zh.jin@catontechnology.com>
 	* cdxs-3, 针对账号限速功能
 	* cdxs-11, 增加email通知功能
