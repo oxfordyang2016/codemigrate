@@ -27,6 +27,11 @@ func setupRoute() {
 	beego.Router("/api/v1/statistics/transfer", &c.StatTransferController{})
 	beego.Router("/api/v1/statistics/transfer/:node_id", &c.StatTransferController{})
 	beego.Router("/api/v1/statistics/pkg", &c.StatPkgController{})
+
+	beego.Router("/api/v1/notification/email", &c.EmailController{})
+	beego.Router("/api/v1/notification/email/templates/reload", &c.EmailTemplatesController{})
+	beego.Router("/api/v1/notification/email/smtp_servers", &c.EmailSmtpsController{})
+	beego.Router("/api/v1/notification/email/smtp_servers/:label", &c.EmailSmtpController{})
 }
 
 func setupFilter() {

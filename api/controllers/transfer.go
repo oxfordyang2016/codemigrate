@@ -179,6 +179,16 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 		pkg.JobMgr.ProcessJob(jobid)
 		return
 	}
+	job_detail := pkg.JobMgr.GetJobDetail(jobid, req.Fid)
+	if job_detail == nil {
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	if job_detail.State == cydex.TRANSFER_STATE_DOING {
+		clog.Warnf("%s is still tansferring, can't transfer again", job_detail)
+		rsp.Error = cydex.ErrCreateTransferAgain
+		return
+	}
 	// update jd process
 	pkg.UpdateJobDetailProcess(jobid, req.Fid, req.FinishedSize, req.NumFinishedSegs)
 
@@ -192,13 +202,24 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 		rsp.Error = cydex.ErrInnerServer
 		return
 	}
+	// bitrate stuff
+	maxbitrate := req.MaxBitrate
+	max_bps, _ := self.fetchUserMaxBitrate(cydex.DOWNLOAD)
+	// NOTE: 客户端请求的maxbitrate可能为0, 此时要取账号限速
+	if maxbitrate == 0 {
+		maxbitrate = max_bps
+	}
+	if max_bps > 0 && max_bps < maxbitrate {
+		maxbitrate = max_bps
+	}
 	// get storages
-	task_req := buildTaskDownloadReq(owner_uid, pid, req.Fid, req.SegIds, req.MaxBitrate)
+	task_req := buildTaskDownloadReq(owner_uid, pid, req.Fid, req.SegIds, maxbitrate)
 	if task_req == nil {
 		rsp.Error = cydex.ErrInnerServer
 		return
 	}
 	task_req.JobId = jobid
+	task_req.Ip = self.Ip
 	trans_rsp, node, err := task.TaskMgr.DispatchDownload(task_req, DISPATCH_TIMEOUT)
 	if err != nil || node == nil || trans_rsp == nil {
 		clog.Error(err)
@@ -216,6 +237,10 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 	rsp.Host = getHost(node)
 	rsp.Port = task_rsp.Port
 	rsp.RecomendBitrate = task_rsp.RecomendBitrate
+	// user rate limit
+	if max_bps > 0 && max_bps < rsp.RecomendBitrate {
+		rsp.RecomendBitrate = max_bps
+	}
 	for _, sid := range task_rsp.SidList {
 		seg_m, _ := pkg_model.GetSeg(sid)
 		if seg_m != nil {
@@ -230,7 +255,7 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 		}
 	}
 
-	clog.Infof("dispatch download ok, host:%s, port:%d, bps:%d", node.Host, task_rsp.Port, task_rsp.RecomendBitrate)
+	clog.Infof("dispatch download ok, host:%s, port:%d, bps:(%d %d %d)", node.Host, task_rsp.Port, rsp.RecomendBitrate, task_rsp.RecomendBitrate, max_bps)
 }
 
 func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex.TransferRsp) {
@@ -256,8 +281,17 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 	jobid := pkg.HashJob(uid, pid, cydex.UPLOAD)
 	job_m := pkg.JobMgr.GetJob(jobid)
 	if job_m == nil {
-		clog.Error(err)
 		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	job_detail := pkg.JobMgr.GetJobDetail(jobid, req.Fid)
+	if job_detail == nil {
+		rsp.Error = cydex.ErrInnerServer
+		return
+	}
+	if job_detail.State == cydex.TRANSFER_STATE_DOING {
+		clog.Warnf("%s is still tansferring, can't transfer again", job_detail)
+		rsp.Error = cydex.ErrCreateTransferAgain
 		return
 	}
 	transferd_size, _ := job_m.GetTransferedSize()
@@ -266,6 +300,7 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 		clog.Errorf("%s flag is %d, detail shouldn't be nil", file_m, file_m.Flag)
 		rsp.Error = cydex.ErrInnerServer
 	}
+	max_bps, _ := self.fetchUserMaxBitrate(cydex.UPLOAD)
 
 	task_req := new(task.UploadReq)
 	task_req.JobId = jobid
@@ -286,6 +321,7 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 			task_req.UploadTaskReq.Size += seg.Size
 		}
 	}
+	task_req.Ip = self.Ip
 
 	clog.Tracef("upload req: %+v", task_req)
 
@@ -314,6 +350,10 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 	rsp.Host = getHost(node)
 	rsp.Port = task_rsp.Port
 	rsp.RecomendBitrate = task_rsp.RecomendBitrate
+	// account br limit
+	if max_bps > 0 && max_bps < rsp.RecomendBitrate {
+		rsp.RecomendBitrate = max_bps
+	}
 	for _, sid := range task_rsp.SidList {
 		seg_m, _ := pkg_model.GetSeg(sid)
 		if seg_m != nil {
@@ -328,7 +368,7 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 		}
 	}
 
-	clog.Infof("dispatch upload ok, host:%s, port:%d, bps:%d", node.Host, task_rsp.Port, task_rsp.RecomendBitrate)
+	clog.Infof("dispatch upload ok, host:%s, port:%d, bps:(%d %d %d)", node.Host, task_rsp.Port, rsp.RecomendBitrate, task_rsp.RecomendBitrate, max_bps)
 }
 
 // 如果有预设的public_addr, 则取之

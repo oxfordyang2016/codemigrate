@@ -10,7 +10,6 @@ import (
 	"cydex/transfer"
 	"fmt"
 	clog "github.com/cihub/seelog"
-	"strings"
 	"sync"
 	"time"
 )
@@ -67,9 +66,19 @@ func updateJobDetail(jd *models.JobDetail, state *transfer.TaskState, seg_state 
 		if seg_m != nil {
 			state.RealTotalBytes = seg_m.Size
 		}
-		jd.FinishedSize += state.GetTotalBytes()
+		if jd.File == nil {
+			jd.GetFile()
+		}
 		jd.CurSegSize = 0
+		jd.FinishedSize += state.GetTotalBytes()
 		jd.NumFinishedSegs++
+		// cdxs-22, 保护数据不过限
+		if jd.FinishedSize > jd.File.Size {
+			jd.FinishedSize = jd.File.Size
+		}
+		if jd.NumFinishedSegs > jd.File.NumSegs {
+			jd.NumFinishedSegs = jd.File.NumSegs
+		}
 		save = true
 	} else {
 		jd.CurSegSize = state.TotalBytes
@@ -107,6 +116,12 @@ func NewTrack() *Track {
 // 	NumFinishedDetails int
 // }
 
+type JobObserver interface {
+	OnJobCreate(*models.Job)
+	OnJobStart(*models.Job)
+	OnJobFinish(*models.Job)
+}
+
 type JobManager struct {
 	lock               sync.Mutex
 	cache_sync_timeout time.Duration //cache同步超时时间
@@ -116,6 +131,7 @@ type JobManager struct {
 	track_users   map[string]*Track      // uid->track, track里记录上传下载的pid
 	track_pkgs    map[string]*Track      // pid->track, track里记录上传下载的uid
 	track_deletes map[string]*Track      // uid->track, track里记录被删除的pid
+	job_observers []JobObserver
 }
 
 func NewJobManager() *JobManager {
@@ -166,6 +182,11 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 
 		// 删除原有的cache
 		delete(self.jobs, jobid)
+
+		// notify observers
+		for _, o := range self.job_observers {
+			o.OnJobCreate(job_m)
+		}
 		return nil
 	}
 
@@ -229,6 +250,11 @@ func (self *JobManager) CreateJob(uid, pid string, typ int) (err error) {
 		for _, u_job := range upload_jobs {
 			self.AddTrack(u_job.Uid, u_job.Pid, u_job.Type, false)
 		}
+	}
+
+	// notify observers
+	for _, o := range self.job_observers {
+		o.OnJobCreate(j)
 	}
 
 	return nil
@@ -326,7 +352,7 @@ func (self *JobManager) AddTask(t *task.Task) {
 		jd.GetFile()
 	}
 	// issue-47, issue-50
-	if jd.StartTime.IsZero() || (t.NumSeg == jd.File.NumSegs) {
+	if jd.StartTime.IsZero() || (t.NumSegs == jd.File.NumSegs) {
 		if jd.File.Size > 0 {
 			jd.Reset()
 			jd.StartTime = time.Now()
@@ -336,10 +362,42 @@ func (self *JobManager) AddTask(t *task.Task) {
 		}
 		jd.Save()
 	}
+
+	if job.State == cydex.TRANSFER_STATE_IDLE {
+		job.SaveState(cydex.TRANSFER_STATE_DOING)
+		self.lock.Lock()
+		defer self.lock.Unlock()
+		for _, o := range self.job_observers {
+			o.OnJobStart(job)
+		}
+	}
 }
 
 func (self *JobManager) DelTask(t *task.Task) {
-	if t != nil {
+	if t == nil {
+		return
+	}
+
+	// cdxs-12: JobDetail和task状态要保持一致
+	jobid := t.JobId
+	j := self.GetJob(jobid)
+	if j == nil {
+		return
+	}
+	jd := self.GetJobDetail(jobid, t.Fid)
+	if jd == nil {
+		return
+	}
+	if jd.State == t.State {
+		return
+	}
+
+	// NOTE: node的task会由于异常而停止，不一定带sid，所以jd也要更新。
+	// 如果task是end状态，jd不一定是，例如边上传边下时task完了，但是jd不一定完毕。
+	// end状态一般带sid，由TaskStateNotify来处理。如果不带，这边也没法处理，因为需要确认所有的segs完成才算完成
+	if t.State == cydex.TRANSFER_STATE_PAUSE {
+		jd.State = t.State
+		jd.Save()
 	}
 }
 
@@ -361,20 +419,8 @@ func (self *JobManager) TaskStateNotify(t *task.Task, state *transfer.TaskState)
 		jd.GetFile()
 	}
 
+	seg_state := t.State
 	// 更新JobDetails状态, 根据判断更新Job状态, 是否finished?
-	seg_state := 0
-	s := strings.ToLower(state.State)
-	switch s {
-	case "transferring":
-		seg_state = cydex.TRANSFER_STATE_DOING
-	case "interrupted":
-		seg_state = cydex.TRANSFER_STATE_PAUSE
-	case "end":
-		seg_state = cydex.TRANSFER_STATE_DONE
-	default:
-		return
-	}
-
 	force_save := updateJobDetail(jd, state, seg_state)
 
 	if jd.State == cydex.TRANSFER_STATE_DONE {
@@ -594,6 +640,34 @@ func (self *JobManager) LoadTracks() error {
 	return nil
 }
 
+// NOTE: cdxs-13, 为job增加了FinishedTimes字段，job需要同步一下状态
+func (self *JobManager) JobsSyncState() error {
+	clog.Infof("jobs sync state")
+	jobs, err := models.GetJobs(cydex.DOWNLOAD, nil)
+	if err == nil {
+		for _, job := range jobs {
+			if job.IsFinished() {
+				if job.FinishedTimes == 0 {
+					job.Finish()
+				}
+			}
+		}
+	}
+
+	jobs, err = models.GetJobs(cydex.UPLOAD, nil)
+	if err == nil {
+		for _, job := range jobs {
+			if job.IsFinished() {
+				if job.FinishedTimes == 0 {
+					job.Finish()
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // 增加delete_track的信息
 func (self *JobManager) AddTrackOfDelete(uid string, pid string, typ int, mutex bool) {
 	if mutex {
@@ -663,6 +737,7 @@ func (self *JobManager) ProcessJob(jobid string) {
 	}
 	if self.isJobFinished(job) {
 		clog.Infof("%s is finished", jobid)
+		job.Finish()
 
 		// 延时删除track和cache
 		if self.del_job_delay > 0 {
@@ -680,6 +755,12 @@ func (self *JobManager) ProcessJob(jobid string) {
 			self.DelTrack(job.Uid, job.Pid, job.Type, false)
 			self.lock.Unlock()
 		}
+
+		self.lock.Lock()
+		for _, o := range self.job_observers {
+			o.OnJobFinish(job)
+		}
+		self.lock.Unlock()
 	}
 }
 
@@ -713,6 +794,15 @@ func (self *JobManager) ClearTracks(mutex bool) {
 	self.track_users = make(map[string]*Track)
 	self.track_pkgs = make(map[string]*Track)
 	self.track_deletes = make(map[string]*Track)
+}
+
+func (self *JobManager) AddJobObserver(o JobObserver) {
+	if o == nil {
+		return
+	}
+	defer self.lock.Unlock()
+	self.lock.Lock()
+	self.job_observers = append(self.job_observers, o)
 }
 
 // 更新JD进度

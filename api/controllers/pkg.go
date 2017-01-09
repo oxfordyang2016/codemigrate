@@ -17,6 +17,9 @@ func fillTransferState(state *cydex.TransferState, uid string, size uint64, jd *
 	state.State = jd.State
 	if size > 0 {
 		state.Percent = int((jd.FinishedSize + jd.CurSegSize) * 100 / size)
+		if state.Percent > 100 {
+			state.Percent = 100
+		}
 	} else {
 		state.Percent = 100
 	}
@@ -204,6 +207,9 @@ func (self *PkgsController) getAllJobs() {
 
 		rsp.Pkgs = append(rsp.Pkgs, pkg_c)
 	}
+	if page != nil {
+		rsp.TotalNum = int(page.TotalNum)
+	}
 }
 
 func (self *PkgsController) getJobs(typ int) {
@@ -252,6 +258,9 @@ func (self *PkgsController) getJobs(typ int) {
 		}
 
 		rsp.Pkgs = append(rsp.Pkgs, pkg_c)
+	}
+	if page != nil {
+		rsp.TotalNum = int(page.TotalNum)
 	}
 }
 
@@ -391,6 +400,12 @@ func (self *PkgsController) getLitePkgs() {
 	uid := self.GetString(":uid")
 	query := self.GetString("query")
 	rsp := new(cydex.QueryPkgLiteRsp)
+	page := new(cydex.Pagination)
+	page.PageSize, _ = self.GetInt("page_size")
+	page.PageNum, _ = self.GetInt("page_num")
+	if !page.Verify() {
+		page = nil
+	}
 
 	defer func() {
 		if rsp.Pkgs == nil {
@@ -411,7 +426,7 @@ func (self *PkgsController) getLitePkgs() {
 			rsp.Error = cydex.ErrNotAllowed
 			return
 		}
-		jobs, err := pkg_model.GetJobs(cydex.UPLOAD, nil)
+		jobs, err := pkg_model.GetJobs(cydex.UPLOAD, page)
 		if err != nil {
 			clog.Error(err)
 			rsp.Error = cydex.ErrInnerServer
@@ -424,7 +439,7 @@ func (self *PkgsController) getLitePkgs() {
 			pkgs = append(pkgs, j.Pkg)
 		}
 	case "sender":
-		jobs, err := pkg_model.GetJobsByUid(uid, cydex.UPLOAD, nil)
+		jobs, err := pkg_model.GetJobsByUid(uid, cydex.UPLOAD, page)
 		if err != nil {
 			clog.Error(err)
 			rsp.Error = cydex.ErrInnerServer
@@ -437,7 +452,7 @@ func (self *PkgsController) getLitePkgs() {
 			pkgs = append(pkgs, j.Pkg)
 		}
 	case "receiver":
-		jobs, err := pkg_model.GetJobsByUid(uid, cydex.DOWNLOAD, nil)
+		jobs, err := pkg_model.GetJobsByUid(uid, cydex.DOWNLOAD, page)
 		if err != nil {
 			clog.Error(err)
 			rsp.Error = cydex.ErrInnerServer
@@ -481,6 +496,9 @@ func (self *PkgsController) getLitePkgs() {
 		}
 		rsp.Pkgs = append(rsp.Pkgs, pkg_lite)
 	}
+	if page != nil {
+		rsp.TotalNum = int(page.TotalNum)
+	}
 }
 
 func (self *PkgsController) Post() {
@@ -511,8 +529,12 @@ func (self *PkgsController) Post() {
 		return
 	}
 	for _, f := range req.Files {
-		f.Size, _ = strconv.ParseUint(f.SizeStr, 10, 64)
-		clog.Trace(f.Size)
+		var err error
+		f.Size, err = strconv.ParseUint(f.SizeStr, 10, 64)
+		if err != nil {
+			rsp.Error = cydex.ErrInvalidParam
+			return
+		}
 	}
 
 	self.createPkg(req, rsp)
@@ -1012,6 +1034,15 @@ func (self *FileController) Get() {
 	file.Chara = file_m.EigenValue
 	file.PathAbs = file_m.PathAbs
 
+	file_m.GetSegs()
+	for _, seg_m := range file_m.Segs {
+		seg := new(cydex.Seg)
+		seg.Sid = seg_m.Sid
+		seg.SetSize(seg_m.Size)
+		seg.Status = seg_m.State
+		file.Segs = append(file.Segs, seg)
+	}
+
 	uploads_jobs, err := pkg_model.GetJobsByPid(pid, cydex.UPLOAD, nil)
 	if err != nil {
 		rsp.Error = cydex.ErrInnerServer
@@ -1056,16 +1087,16 @@ func (self *FileController) Get() {
 }
 
 // 是否在传输
-func isJobTransferring(job *pkg_model.Job) (bool, error) {
-	tasks, err := task.LoadTasksByPidFromCache(job.Pid)
-	if err != nil {
-		return false, err
-	}
-	if len(tasks) > 0 {
-		return true, nil
-	}
-	return false, nil
-}
+// func isJobTransferring(job *pkg_model.Job) (bool, error) {
+// 	tasks, err := task.LoadTasksByPidFromCache(job.Pid)
+// 	if err != nil {
+// 		return false, err
+// 	}
+// 	if len(tasks) > 0 {
+// 		return true, nil
+// 	}
+// 	return false, nil
+// }
 
 func isJobsTransferring(jobs []*pkg_model.Job) ([]bool, error) {
 	tasks, err := task.LoadTasksFromCache(nil)

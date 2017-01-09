@@ -5,8 +5,9 @@ import (
 	api_ctrl "./api/controllers"
 	"./pkg"
 	pkg_model "./pkg/models"
-	"./statistics"
-	stat_model "./statistics/models"
+	// "./statistics"
+	// stat_model "./statistics/models"
+	"./notify"
 	trans "./transfer"
 	trans_model "./transfer/models"
 	"./transfer/task"
@@ -21,7 +22,7 @@ import (
 )
 
 const (
-	VERSION = "0.1.0-beta1"
+	VERSION = "0.2.0"
 )
 
 const (
@@ -51,6 +52,24 @@ func initLog() {
 	}
 }
 
+func setupUserDB(cfg *ini.File) (err error) {
+	// 连接User数据库
+	clog.Info("setup user db")
+	sec, err := cfg.GetSection("user_db")
+	if err != nil {
+		return err
+	}
+	driver := sec.Key("driver").String()
+	source := sec.Key("source").String()
+	show_sql := sec.Key("show_sql").MustBool()
+	clog.Infof("[setup db] url:'%s %s' show_sql:%t", driver, source, show_sql)
+	if err = db.CreateUserEngine(driver, source, show_sql); err != nil {
+		return
+	}
+
+	return
+}
+
 func setupDB(cfg *ini.File) (err error) {
 	// 创建数据库
 	clog.Info("setup db")
@@ -69,30 +88,27 @@ func setupDB(cfg *ini.File) (err error) {
 	var tables []interface{}
 	tables = append(tables, pkg_model.Tables...)
 	tables = append(tables, trans_model.Tables...)
-	tables = append(tables, stat_model.Tables...)
+	// tables = append(tables, stat_model.Tables...)
 	if err = db.SyncTables(tables); err != nil {
 		return
 	}
-	// if err = pkg_model.SyncTables(); err != nil {
-	// 	return
-	// }
-	// if err = trans_model.SyncTables(); err != nil {
-	// 	return
-	// }
-	// if err = stat_model.SyncTables(); err != nil {
-	// 	return
-	// }
 
 	// 设置cache
 	var caches []interface{}
 	caches = append(caches, pkg_model.Caches...)
 	caches = append(caches, trans_model.Caches...)
-	caches = append(caches, stat_model.Caches...)
+	// caches = append(caches, stat_model.Caches...)
 	db.MapCache(caches)
+
+	// migrate db and data
+	clog.Infof("[setup db] migrate...")
+	pkg.JobMgr.JobsSyncState()
+	clog.Infof("[setup db] migrate ok")
+
 	return
 }
 
-func setupCache(cfg *ini.File) (err error) {
+func setupRedis(cfg *ini.File) (err error) {
 	sec, err := cfg.GetSection("redis")
 	if err != nil {
 		return err
@@ -241,11 +257,71 @@ func setupHttp(cfg *ini.File) (err error) {
 	return
 }
 
+func setupNotificationEmailHandler(cfg *ini.File, sec *ini.Section) error {
+	enable := sec.Key("enable").MustBool(false)
+	smtp_label := sec.Key("smtp_server").MustString("default")
+	contact_name := sec.Key("contact_name").String()
+	templates_dir := sec.Key("templates_dir").String()
+
+	smtp_sec, err := cfg.GetSection(fmt.Sprintf("smtp_server.%s", smtp_label))
+	if err != nil {
+		return err
+	}
+
+	smtp_server := notify.SmtpServer{
+		Label:    smtp_label,
+		Host:     smtp_sec.Key("host").String(),
+		Port:     smtp_sec.Key("port").MustInt(0),
+		Account:  smtp_sec.Key("account").String(),
+		Password: smtp_sec.Key("password").String(),
+		UseTLS:   smtp_sec.Key("use_tls").MustBool(false),
+	}
+
+	notify.Email.SetEnable(enable)
+	notify.Email.SetContactName(contact_name)
+	notify.Email.SetSmtpServer(&smtp_server)
+	notify.Email.SetTemplateBaseDir(templates_dir)
+	// load templates
+	if err := notify.Email.LoadTemplates(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func setupNotification(cfg *ini.File) (err error) {
+	sec, err := cfg.GetSection("notification")
+	if err != nil {
+		return err
+	}
+
+	enable := sec.Key("enable").MustBool(false)
+	notify.Manage.SetEnable(enable)
+
+	handlers := sec.Key("handlers").Strings(utils.CFG_SEP)
+	for _, handler := range handlers {
+		handler_sec, err := cfg.GetSection(fmt.Sprintf("notification.%s", handler))
+		if err != nil {
+			continue
+		}
+		switch handler {
+		case "email":
+			if err := setupNotificationEmailHandler(cfg, handler_sec); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func setupApplication(cfg *ini.File) (err error) {
 	if err = setupDB(cfg); err != nil {
 		return
 	}
-	if err = setupCache(cfg); err != nil {
+	if err = setupUserDB(cfg); err != nil {
+		return
+	}
+	if err = setupRedis(cfg); err != nil {
 		return
 	}
 	if err = setupPkg(cfg); err != nil {
@@ -260,6 +336,9 @@ func setupApplication(cfg *ini.File) (err error) {
 	if err = setupHttp(cfg); err != nil {
 		return
 	}
+	if err = setupNotification(cfg); err != nil {
+		return
+	}
 	return
 }
 
@@ -269,12 +348,20 @@ func run() {
 	// task add observer for job
 	task.TaskMgr.AddObserver(pkg.JobMgr)
 	// task add observer for statistics
-	task.TaskMgr.AddObserver(statistics.TransferMgr)
+	// task.TaskMgr.AddObserver(statistics.TransferMgr)
 	// 从数据库导入track
 	pkg.JobMgr.LoadTracks()
+	// job add observer for notification
+	pkg.JobMgr.AddJobObserver(notify.Manage)
 
 	go task.TaskMgr.TaskStateRoutine()
 	go ws_server.Serve()
+
+	clog.Info("Notification start")
+	go notify.Manage.Serve()
+
+	clog.Info("Notification email handler start")
+	notify.Email.Start()
 
 	beego.SetLevel(beego_loglevel)
 	go beego.Run(http_addr)

@@ -13,15 +13,17 @@ const (
 )
 
 type Job struct {
-	Id       int64     `xorm:"pk autoincr"`
-	JobId    string    `xorm:"unique not null"`
-	Type     int       `xorm:"int"` // cydex.UPLOAD or cydex.DOWNLOAD
-	Pid      string    `xorm:"varchar(22) not null"`
-	Pkg      *Pkg      `xorm:"-"`
-	Uid      string    `xorm:"varchar(12) not null"`
-	CreateAt time.Time `xorm:"DateTime created"`
-	UpdateAt time.Time `xorm:"DateTime updated"`
-	SoftDel  int       `xorm:"BOOL not null default(0)"`
+	Id            int64     `xorm:"pk autoincr"`
+	JobId         string    `xorm:"unique not null"`
+	Type          int       `xorm:"int"` // cydex.UPLOAD or cydex.DOWNLOAD
+	Pid           string    `xorm:"varchar(22) not null"`
+	Pkg           *Pkg      `xorm:"-"`
+	Uid           string    `xorm:"varchar(12) not null"`
+	CreateAt      time.Time `xorm:"DateTime created"`
+	UpdateAt      time.Time `xorm:"DateTime updated"`
+	SoftDel       int       `xorm:"BOOL not null default(0)"`
+	FinishedTimes int       `xorm:"not null default(0)"`
+	State         int       `xorm:"Int not null default(0)"` //FIXME: 目前和jd状态不同步，只用于判断是否是第一次下载
 
 	// runtime usage
 	Details              map[string]*JobDetail `xorm:"-"`
@@ -57,7 +59,12 @@ func GetJob(jobid string, with_pkg bool) (*Job, error) {
 func GetJobs(typ int, p *cydex.Pagination) ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	var err error
-	sess := DB().Where("type=? and soft_del=0", typ)
+	query := "type=? and soft_del=0"
+	if p != nil {
+		n, _ := DB().Where(query, typ).Count(new(Job))
+		p.TotalNum = n
+	}
+	sess := DB().Where(query, typ)
 	if p != nil {
 		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
 	}
@@ -71,7 +78,12 @@ func GetJobs(typ int, p *cydex.Pagination) ([]*Job, error) {
 func GetJobsByUid(uid string, typ int, p *cydex.Pagination) ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	var err error
-	sess := DB().Where("uid=? and type=? and soft_del=0", uid, typ)
+	query := "uid=? and type=? and soft_del=0"
+	if p != nil {
+		n, _ := DB().Where(query, uid, typ).Count(new(Job))
+		p.TotalNum = n
+	}
+	sess := DB().Where(query, uid, typ)
 	if p != nil {
 		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
 	}
@@ -85,7 +97,12 @@ func GetJobsByUid(uid string, typ int, p *cydex.Pagination) ([]*Job, error) {
 func GetJobsByPid(pid string, typ int, p *cydex.Pagination) ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	var err error
-	sess := DB().Where("pid=? and type=? and soft_del=0", pid, typ)
+	query := "pid=? and type=? and soft_del=0"
+	if p != nil {
+		n, _ := DB().Where(query, pid, typ).Count(new(Job))
+		p.TotalNum = n
+	}
+	sess := DB().Where(query, pid, typ)
 	if p != nil {
 		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
 	}
@@ -204,6 +221,19 @@ func (self *Job) IsFinished() bool {
 	return n == 0
 }
 
+func (self *Job) Finish() error {
+	self.FinishedTimes++
+	self.State = cydex.TRANSFER_STATE_DONE
+	_, err := DB().Id(self.Id).Cols("finished_times", "state").Update(self)
+	return err
+}
+
+func (self *Job) SaveState(state int) error {
+	self.State = state
+	_, err := DB().Id(self.Id).Cols("state").Update(self)
+	return err
+}
+
 // 获取传输了多少数据
 func (self *Job) GetTransferedSize() (uint64, error) {
 	jds, err := GetJobDetails(self.JobId)
@@ -220,14 +250,16 @@ func (self *Job) GetTransferedSize() (uint64, error) {
 }
 
 func (self *Job) String() string {
-	return fmt.Sprintf("<Job(%s)", self.JobId)
+	return fmt.Sprintf("<Job(%s)>", self.JobId)
 }
+
+// ----------------------------------------------------------------------------- //
 
 type JobDetail struct {
 	Id              int64     `xorm:"pk autoincr"`
-	JobId           string    `xorm:"not null"`
+	JobId           string    `xorm:"unique(jobidfid) not null"`
 	Job             *Job      `xorm:"-"`
-	Fid             string    `xorm:"varchar(24) not null"`
+	Fid             string    `xorm:"unique(jobidfid) varchar(24) not null "`
 	File            *File     `xorm:"-"`
 	StartTime       time.Time `xorm:"DateTime"`
 	FinishTime      time.Time `xorm:"DateTime"`

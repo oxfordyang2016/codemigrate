@@ -2,7 +2,7 @@ package task
 
 import (
 	trans "./../"
-	// "./../models"
+	"./../models"
 	"cydex"
 	"cydex/transfer"
 	. "github.com/smartystreets/goconvey/convey"
@@ -38,12 +38,14 @@ func Test_RestrictUploadScheduler(t *testing.T) {
 			trans.NodeMgr.AddNode(node)
 
 			t1 := &Task{
-				TaskId: "t0",
-				JobId:  "jobid",
-				Pid:    "1234567890ab1111122222",
-				Type:   cydex.UPLOAD,
-				Nid:    "n1",
-				Fid:    "1234567890ab111112222201",
+				Task: &models.Task{
+					TaskId: "t0",
+					JobId:  "jobid",
+					Pid:    "1234567890ab1111122222",
+					Type:   cydex.UPLOAD,
+					NodeId: "n1",
+					Fid:    "1234567890ab111112222201",
+				},
 			}
 			S.AddTask(t1)
 
@@ -82,11 +84,13 @@ func Test_RestrictUploadScheduler(t *testing.T) {
 			}
 			trans.NodeMgr.AddNode(node)
 			t1 := &Task{
-				TaskId: "t0",
-				Type:   cydex.UPLOAD,
-				Pid:    "pid",
-				Fid:    "1234567890ab111112222201",
-				Nid:    "n1",
+				Task: &models.Task{
+					TaskId: "t0",
+					Type:   cydex.UPLOAD,
+					Pid:    "pid",
+					Fid:    "1234567890ab111112222201",
+					NodeId: "n1",
+				},
 			}
 			S.AddTask(t1)
 
@@ -112,11 +116,13 @@ func Test_RestrictUploadScheduler(t *testing.T) {
 			}
 			trans.NodeMgr.AddNode(node)
 			t1 := &Task{
-				TaskId: "t0",
-				JobId:  "jobid",
-				Fid:    "1234567890ab111112222201",
-				Type:   cydex.UPLOAD,
-				Nid:    "n1",
+				Task: &models.Task{
+					TaskId: "t0",
+					JobId:  "jobid",
+					Fid:    "1234567890ab111112222201",
+					Type:   cydex.UPLOAD,
+					NodeId: "n1",
+				},
 			}
 			S.AddTask(t1)
 
@@ -160,11 +166,13 @@ func Test_RestrictUploadScheduler(t *testing.T) {
 			}
 			trans.NodeMgr.AddNode(node)
 			t1 := &Task{
-				TaskId: "t0",
-				JobId:  "jobid",
-				Fid:    "1234567890ab111112222201",
-				Type:   cydex.UPLOAD,
-				Nid:    "n1",
+				Task: &models.Task{
+					TaskId: "t0",
+					JobId:  "jobid",
+					Fid:    "1234567890ab111112222201",
+					Type:   cydex.UPLOAD,
+					NodeId: "n1",
+				},
 			}
 			S.AddTask(t1)
 

@@ -1,3 +1,13 @@
+2016-12-22 v0.2.0 zh.jin <zh.jin@catontechnology.com>
+	* cdxs-3, 针对账号限速功能
+	* cdxs-11, 增加email通知功能
+
+2016-11-22 v0.1.1-alpha zh.jin <zh.jin@catontechnology.com>
+	* old-cdxs-13, 查询包裹支持分页功能
+	* old-cdxs-20, 增加task记录的字段,为报表统计做准备;使用数据库+cache代替redis来获取task信息
+	* old-cdxs-22, 修复可能的传输进度超限问题
+	* old-cdxs-24, 修复重复续传造成进度回退的问题
+
 2016-10-29 v0.1.0-beta1 zh.jin <zh.jin@catontechnology.com>
 	* issue-48, 修复分片被存储到不同分区上的问题,上传也要带storage url参数
 	* issue-50, 重新下载需要清除原先的值,再设置起始时间
