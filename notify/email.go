@@ -53,7 +53,7 @@ func NewPkgEvMailContext(pkg_ev *PkgEvent) *PkgEvMailContext {
 	o := new(PkgEvMailContext)
 	o.PkgEvent = pkg_ev
 
-	// TODO for test
+	// NOTE for test
 	// pkg_ev.User = &cydex.User{
 	// 	Username:     "receiver",
 	// 	Email:        "40744134@qq.com",
@@ -408,16 +408,16 @@ func (self *EmailHandler) handlePkgEvent(pkg_ev *PkgEvent) {
 	auth := smtp.PlainAuth("", smtp_server.Account, smtp_server.Password, smtp_server.Host)
 	addr := fmt.Sprintf("%s:%d", smtp_server.Host, smtp_server.Port)
 
-	print(message)
+	// print(message)
 
-	clog.Info("[mail handler] send mail")
+	clog.Info("[mail handler] send mail to %s", mail_ctx.TargetUser.Username)
 
 	// send mail
 	if err := SendMail(smtp_server.UseTLS, addr, auth, smtp_server.Account, []string{mail_ctx.TargetUser.Email}, []byte(message)); err != nil {
-		clog.Errorf("[mail handler] send mail failed, %s", err.Error())
+		clog.Errorf("[mail handler] send mail to %s failed: %s", mail_ctx.TargetUser.Username, err.Error())
 	}
 
-	clog.Info("[mail handler] send mail ok")
+	clog.Info("[mail handler] send mail to %s ok", mail_ctx.TargetUser.Username)
 }
 
 // modified from net/smtp/smtp.go, add TLS support
