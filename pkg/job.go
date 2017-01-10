@@ -72,7 +72,8 @@ func updateJobDetail(jd *models.JobDetail, state *transfer.TaskState, seg_state 
 		jd.CurSegSize = 0
 		jd.FinishedSize += state.GetTotalBytes()
 		jd.NumFinishedSegs++
-		// cdxs-22, 保护数据不过限
+		jd.State = cydex.TRANSFER_STATE_PAUSE // cdxs-14
+		// old-cdxs-22, 保护数据不过限
 		if jd.FinishedSize > jd.File.Size {
 			jd.FinishedSize = jd.File.Size
 		}
@@ -85,8 +86,6 @@ func updateJobDetail(jd *models.JobDetail, state *transfer.TaskState, seg_state 
 		jd.State = seg_state
 	}
 
-	clog.Tracef("%s update: %d %d %d", jd, jd.NumFinishedSegs, jd.FinishedSize, jd.CurSegSize)
-
 	// jd is finished?
 	if jd.NumFinishedSegs == jd.File.NumSegs {
 		clog.Infof("%s is finished", jd)
@@ -94,6 +93,8 @@ func updateJobDetail(jd *models.JobDetail, state *transfer.TaskState, seg_state 
 		jd.FinishTime = time.Now()
 		save = true
 	}
+
+	clog.Tracef("%s update: %d %d %d s:%d", jd, jd.NumFinishedSegs, jd.FinishedSize, jd.CurSegSize, jd.State)
 
 	return
 }
@@ -668,6 +669,8 @@ func (self *JobManager) JobsSyncState() error {
 			}
 		}
 	}
+
+	models.ProtectJobDetailState()
 
 	return nil
 }
