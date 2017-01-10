@@ -410,14 +410,14 @@ func (self *EmailHandler) handlePkgEvent(pkg_ev *PkgEvent) {
 
 	// print(message)
 
-	clog.Info("[mail handler] send mail to %s", mail_ctx.TargetUser.Username)
+	clog.Infof("[mail handler] send mail to %s", mail_ctx.TargetUser.Username)
 
 	// send mail
 	if err := SendMail(smtp_server.UseTLS, addr, auth, smtp_server.Account, []string{mail_ctx.TargetUser.Email}, []byte(message)); err != nil {
 		clog.Errorf("[mail handler] send mail to %s failed: %s", mail_ctx.TargetUser.Username, err.Error())
 	}
 
-	clog.Info("[mail handler] send mail to %s ok", mail_ctx.TargetUser.Username)
+	clog.Infof("[mail handler] send mail to %s ok", mail_ctx.TargetUser.Username)
 }
 
 // modified from net/smtp/smtp.go, add TLS support

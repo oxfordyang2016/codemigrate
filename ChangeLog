@@ -1,3 +1,8 @@
+2017-01-09 v0.2.1 zh.jin <zh.jin@catontechnology.com>
+	* cdxs-12, 修复超时task会更改JD的已完成状态
+	* 启动时，如果JD状态为DOING，会被自动改成PAUSE，保证下一次可以传输
+	* 当POST /transfer报307错误，连续若干次之后就放行，防止由于意外造成状态为"DOING"而无法传输。
+
 2016-12-22 v0.2.0 zh.jin <zh.jin@catontechnology.com>
 	* cdxs-3, 针对账号限速功能
 	* cdxs-11, 增加email通知功能
