@@ -15,6 +15,7 @@ import (
 
 const (
 	DISPATCH_TIMEOUT = 10 * time.Second
+	MAX_ERR307_TIMES = 5
 )
 
 type TransferController struct {
@@ -184,11 +185,11 @@ func (self *TransferController) processDownload(req *cydex.TransferReq, rsp *cyd
 		rsp.Error = cydex.ErrInnerServer
 		return
 	}
-	if job_detail.State == cydex.TRANSFER_STATE_DOING {
-		clog.Warnf("%s is still tansferring, can't transfer again", job_detail)
-		rsp.Error = cydex.ErrCreateTransferAgain
-		return
-	}
+	// if job_detail.State == cydex.TRANSFER_STATE_DOING {
+	// 	clog.Warnf("%s is still tansferring, can't transfer again", job_detail)
+	// 	rsp.Error = cydex.ErrCreateTransferAgain
+	// 	return
+	// }
 	// update jd process
 	pkg.UpdateJobDetailProcess(jobid, req.Fid, req.FinishedSize, req.NumFinishedSegs)
 
@@ -290,10 +291,14 @@ func (self *TransferController) processUpload(req *cydex.TransferReq, rsp *cydex
 		return
 	}
 	if job_detail.State == cydex.TRANSFER_STATE_DOING {
-		clog.Warnf("%s is still tansferring, can't transfer again", job_detail)
-		rsp.Error = cydex.ErrCreateTransferAgain
-		return
+		if job_detail.Err307Times < MAX_ERR307_TIMES {
+			job_detail.Err307Times++
+			clog.Warnf("%s is still tansferring, can't transfer again", job_detail)
+			rsp.Error = cydex.ErrCreateTransferAgain
+			return
+		}
 	}
+	job_detail.Err307Times = 0
 	transferd_size, _ := job_m.GetTransferedSize()
 	detail := getFileDetail(file_m)
 	if cydex.IsFileNoSlice(file_m.Flag) && detail == nil {

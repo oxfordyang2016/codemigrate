@@ -271,9 +271,10 @@ type JobDetail struct {
 	UpdateAt        time.Time `xorm:"DateTime updated"`
 
 	// runtime
-	Bitrate    uint64          `xorm:"-"`
-	CurSegSize uint64          `xorm:"-"`
-	Segs       map[string]*Seg `xorm:"-"` //sid->seg
+	Bitrate     uint64          `xorm:"-"`
+	CurSegSize  uint64          `xorm:"-"`
+	Segs        map[string]*Seg `xorm:"-"` //sid->seg
+	Err307Times int             `xorm:"-"`
 }
 
 // 批量创建
@@ -328,6 +329,14 @@ func GetJobDetailsByFid(fid string) ([]*JobDetail, error) {
 		return nil, err
 	}
 	return ds, nil
+}
+
+// NOTE: 启动时所有DOING的state均置为PAUSE。如果留有DOING的状态，那么会造成无法再传输的问题
+func ProtectJobDetailState() error {
+	jd := new(JobDetail)
+	jd.State = cydex.TRANSFER_STATE_PAUSE
+	_, err := DB().Where("state=?", cydex.TRANSFER_STATE_DOING).Cols("state").Update(jd)
+	return err
 }
 
 func (self *JobDetail) GetFile() (err error) {
