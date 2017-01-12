@@ -286,12 +286,13 @@ func (self *JobManager) DeleteJob(uid, pid string, typ int) (err error) {
 	return
 }
 
-// 从cache里取; 没有的话从数据库取; 如果是非finished,则加入cache
-func (self *JobManager) GetJob(hashid string) *models.Job {
+func (self *JobManager) getJob(hashid string, mutex bool) *models.Job {
 	var err error
 
-	self.lock.Lock()
-	defer self.lock.Unlock()
+	if mutex {
+		self.lock.Lock()
+		defer self.lock.Unlock()
+	}
 
 	j, _ := self.jobs[hashid]
 	if j != nil {
@@ -318,6 +319,11 @@ func (self *JobManager) GetJob(hashid string) *models.Job {
 		}
 	}
 	return j
+}
+
+// 从cache里取; 没有的话从数据库取; 如果是非finished,则加入cache
+func (self *JobManager) GetJob(hashid string) *models.Job {
+	return self.getJob(hashid, true)
 }
 
 // 从cache里取,没有则从数据库取
@@ -519,11 +525,17 @@ func (self *JobManager) DelTrack(uid, pid string, typ int, mutex bool) {
 
 	self.delTrack(uid, pid, typ)
 
-	// 如果上传的pid, 无下载用户了,需要删除
+	// 如果上传的pid, 无下载用户了,并且上传完了，需要删除
 	track, _ := self.track_pkgs[pid]
 	if track != nil {
 		if len(track.Downloads) == 0 {
 			for uid, _ := range track.Uploads {
+				// cdxs-17
+				jobid := HashJob(uid, pid, cydex.UPLOAD)
+				job := self.getJob(jobid, false)
+				if job != nil && !self.isJobFinished(job) {
+					return
+				}
 				self.delTrack(uid, pid, cydex.UPLOAD)
 			}
 		}
