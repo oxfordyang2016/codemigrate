@@ -399,6 +399,32 @@ func (self *PkgsController) getActive() {
 }
 
 func (self *PkgsController) parseJobFilter() *pkg_model.JobFilter {
+    fmt.Println(`
+           vvvvvvvvvvvv
+              uuuuu
+               ||
+               ||
+               ||
+        func (self *PkgsController) parseJobFilter() *pkg_model.JobFilter {
+        	   |||
+        	   |||
+        	   VVV
+
+         i am finishing the bwlow parseJobFilter
+
+         filter := new(pkg_model.JobFilter)
+	     filter.Owner = self.GetString("o")
+	     filter.Title = self.GetString("title")
+	     filter.OrderBy = self.GetString("sort")
+	     dt := self.GetString("dt")
+	        |||||
+	          vvv 
+
+
+    	`)
+
+
+
 	filter := new(pkg_model.JobFilter)
 	filter.Owner = self.GetString("o")
 	filter.Title = self.GetString("title")
@@ -439,26 +465,94 @@ func (self *PkgsController) getLitePkgs() {
                   \\
                   //
                   !!       
+uid := self.GetString(":uid")//get uid
+	query := self.GetString("query")//get query
+	rsp := new(cydex.QueryPkgLiteRsp)//new a response
+	page := new(cydex.Pagination)//new a page
+	page.PageSize, _ = self.GetInt("page_size")
+	page.PageNum, _ = self.GetInt("page_num")
+                ||||||
+                 vvvv
+                 vvvv
+                 vvvv
+                 vvvv
+                  vvv
+
 
 
     	`)
-	uid := self.GetString(":uid")
-	query := self.GetString("query")
-	rsp := new(cydex.QueryPkgLiteRsp)
-	page := new(cydex.Pagination)
+
+
+
+	uid := self.GetString(":uid")//get uid
+	query := self.GetString("query")//get query
+	rsp := new(cydex.QueryPkgLiteRsp)//new a response
+	page := new(cydex.Pagination)//new a page
 	page.PageSize, _ = self.GetInt("page_size")
 	page.PageNum, _ = self.GetInt("page_num")
+
+   fmt.Println(`
+             uuuuuuuuu
+               vvvvv
+                 !!
+                vvvv
+                PageSize
+                page_num
+                 ||
+                 ||
+                vvv
+                vvv
+                vvv
+                vvv
+
+
+   	`)
+    fmt.Println(page.PageSize)
+    fmt.Println(page.PageNum)
+    fmt.Println(`
+
+             |||||
+             |||||
+             |||||
+             vvvvv
+
+    	`)
+
+
+
+
 	if !page.Verify() {
 		page = nil
 	}
-	filter := self.parseJobFilter()
-
+	filter := self.parseJobFilter()//get date owner or so
+//this is for giving response
 	defer func() {
 		if rsp.Pkgs == nil {
 			rsp.Pkgs = make([]*cydex.PkgLite, 0)
 		}
 		self.Data["json"] = rsp
+        ftm.Println(`======
+        	         ||||
+                 return data
+                 return data is
+                    |||||
+                     |||
+                     VVV
+
+        	`)
+		fmt.Println(rsp)
 		self.ServeJSON()
+		fmt.Println(`
+                  uuuuuu
+                   vvvv
+                  return
+                   End
+                   VVV
+
+                   VVV
+
+
+			`)
 	}()
 
 	clog.Debugf("get lite pkgs query is %s", query)
@@ -469,14 +563,15 @@ func (self *PkgsController) getLitePkgs() {
 	switch query {
 	case "admin":
 		if self.UserLevel != cydex.USER_LEVEL_ADMIN {
+			fmt.Println(`you are query ====================================>admin`)
 			rsp.Error = cydex.ErrNotAllowed
 			return
-		}
+		}//auth manage
         fmt.Println(`
                     uuuuuuuuu
                        uuuuuuuuu
               ====================Enter code romm
-
+   url ------->http://192.168.1.234:86/5096e31fcaee/pkg/?query=admin&list=list&page_size=15&page_num=1&title=3154
                        uuuuuuuuu
                        vvvv
                        vvvv
@@ -485,10 +580,11 @@ func (self *PkgsController) getLitePkgs() {
 			rsp.Error = cydex.ErrNotAllowed
 			return
 		}        
+
                      uuuuuuuuu
                        vvvv
                          ||
-
+            i will invoke getjobsex()
 
 
 
@@ -496,6 +592,7 @@ func (self *PkgsController) getLitePkgs() {
         	`)
 
 		jobs, err := pkg_model.GetJobsEx(cydex.UPLOAD, page, filter)
+
 		if err != nil {
 			clog.Error(err)
 			rsp.Error = cydex.ErrInnerServer
