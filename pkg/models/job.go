@@ -65,6 +65,22 @@ func GetJob(jobid string, with_pkg bool) (*Job, error) {
 }
 
 func GetJobs(typ int, p *cydex.Pagination) ([]*Job, error) {
+	fmt.Println(`
+              UUUUUUUUUUUUU
+                 VVVVVVV
+                  VVVVV
+                    V
+func GetJobs(typ int, p *cydex.Pagination) ([]*Job, error) {
+	              UUUUU
+	              UUUUU
+	                VVVVV
+	                VVV
+
+
+
+
+
+		`)
 	jobs := make([]*Job, 0)
 	var err error
 	query := "type=? and soft_del=0"

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+    "fmt"
 )
 
 func fillTransferState(state *cydex.TransferState, uid string, size uint64, jd *pkg_model.JobDetail) {
@@ -425,6 +426,22 @@ func (self *PkgsController) parseJobFilter() *pkg_model.JobFilter {
 }
 
 func (self *PkgsController) getLitePkgs() {
+
+    fmt.Println(`
+
+
+                uuuuuu
+                 vvv
+                 vvv
+         i am invoke  func (self *PkgsController) getLitePkgs() {
+                  \\
+                  //
+                  \\
+                  //
+                  !!       
+
+
+    	`)
 	uid := self.GetString(":uid")
 	query := self.GetString("query")
 	rsp := new(cydex.QueryPkgLiteRsp)
@@ -455,6 +472,29 @@ func (self *PkgsController) getLitePkgs() {
 			rsp.Error = cydex.ErrNotAllowed
 			return
 		}
+        fmt.Println(`
+                    uuuuuuuuu
+                       uuuuuuuuu
+              ====================Enter code romm
+
+                       uuuuuuuuu
+                       vvvv
+                       vvvv
+               case "admin":
+		if self.UserLevel != cydex.USER_LEVEL_ADMIN {
+			rsp.Error = cydex.ErrNotAllowed
+			return
+		}        
+                     uuuuuuuuu
+                       vvvv
+                         ||
+
+
+
+
+
+        	`)
+
 		jobs, err := pkg_model.GetJobsEx(cydex.UPLOAD, page, filter)
 		if err != nil {
 			clog.Error(err)
