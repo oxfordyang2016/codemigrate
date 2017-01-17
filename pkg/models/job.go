@@ -149,6 +149,12 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 		if filter.Owner != "" && typ == cydex.UPLOAD {
 			sess = sess.Where("package_job.uid = ?", filter.Owner)
 		}
+
+        if p != nil {
+		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
+	}
+
+
 		if filter.OrderBy != "" {
 			has_orderby = true
 			order := "ASC"
