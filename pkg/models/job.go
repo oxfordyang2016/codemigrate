@@ -84,6 +84,21 @@ func GetJobs(typ int, p *cydex.Pagination) ([]*Job, error) {
 }
 
 func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) {
+	fmt.Println(`
+                       |
+                       |
+                       |
+
+		---i have enter func GetJobsEx(typ int,
+
+	            p *cydex.Pagination, filter *JobFilter)
+	             ([]*Job, error) { 
+                       |
+                       |
+                       v
+
+
+	             	`)
 	jobs := make([]*Job, 0)
 
 	has_orderby := false
