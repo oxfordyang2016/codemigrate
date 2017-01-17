@@ -75,11 +75,6 @@ func GetJobs(typ int, p *cydex.Pagination) ([]*Job, error) {
 	              UUUUU
 	                VVVVV
 	                VVV
-
-
-
-
-
 		`)
 	jobs := make([]*Job, 0)
 	var err error
@@ -118,9 +113,21 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 	jobs := make([]*Job, 0)
 
 	has_orderby := false
-	sess := DB().NewSession()
+	sess := DB().NewSession()//this is db initiation
 	sess = sess.Where("package_job.type=? and package_job.soft_del=0", typ)
+    fmt.Println(`
 
+    	         ||||
+              UUUUUUUUUUUUU
+               yyyyyyyyy
+                  VVV
+                  VVV
+
+             i wlll in there query database 
+                |||||
+                  ||
+                  VVV    
+    	`)
 	if filter != nil {
 		sess = sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid")
 		if filter.Title != "" {

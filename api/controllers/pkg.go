@@ -540,7 +540,7 @@ uid := self.GetString(":uid")//get uid
                      VVV
 
         	`)
-		fmt.Println(rsp)
+		
 		self.ServeJSON()
 		fmt.Println(`
                   uuuuuu
@@ -585,9 +585,10 @@ uid := self.GetString(":uid")//get uid
                        vvvv
                          ||
             i will invoke getjobsex()
-
-
-
+                         |
+                         |
+                         V
+                         V
 
         	`)
 
