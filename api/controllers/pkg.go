@@ -9,6 +9,7 @@ import (
 	"errors"
 	clog "github.com/cihub/seelog"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -396,6 +397,33 @@ func (self *PkgsController) getActive() {
 	}
 }
 
+func (self *PkgsController) parseJobFilter() *pkg_model.JobFilter {
+	filter := new(pkg_model.JobFilter)
+	filter.Owner = self.GetString("o")
+	filter.Title = self.GetString("title")
+	filter.OrderBy = self.GetString("sort")
+	dt := self.GetString("dt")
+	if dt != "" {
+		strs := strings.Split(dt, "-")
+		if len(strs) == 2 {
+			if strs[0] != "" {
+				v, err := strconv.ParseInt(strs[0], 10, 64)
+				if err == nil {
+					filter.BegTime = time.Unix(v, 0)
+				}
+			}
+			if strs[1] != "" {
+				v, err := strconv.ParseInt(strs[1], 10, 64)
+				if err == nil {
+					filter.EndTime = time.Unix(v, 0)
+				}
+			}
+		}
+	}
+
+	return filter
+}
+
 func (self *PkgsController) getLitePkgs() {
 	uid := self.GetString(":uid")
 	query := self.GetString("query")
@@ -406,6 +434,7 @@ func (self *PkgsController) getLitePkgs() {
 	if !page.Verify() {
 		page = nil
 	}
+	filter := self.parseJobFilter()
 
 	defer func() {
 		if rsp.Pkgs == nil {
@@ -426,7 +455,7 @@ func (self *PkgsController) getLitePkgs() {
 			rsp.Error = cydex.ErrNotAllowed
 			return
 		}
-		jobs, err := pkg_model.GetJobs(cydex.UPLOAD, page)
+		jobs, err := pkg_model.GetJobsEx(cydex.UPLOAD, page, filter)
 		if err != nil {
 			clog.Error(err)
 			rsp.Error = cydex.ErrInnerServer

@@ -1,3 +1,6 @@
+2017-01-09 v0.2.2 zh.jin <zh.jin@catontechnology.com>
+	* cdxs-17, 没上传好的包裹，增加接收者并删除接收者后，上传者的增量包裹数据为空了
+
 2017-01-09 v0.2.1 zh.jin <zh.jin@catontechnology.com>
 	* cdxs-12, 修复超时task会更改JD的已完成状态
 	* 启动时，如果JD状态为DOING，会被自动改成PAUSE，保证下一次可以传输

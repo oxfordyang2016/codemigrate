@@ -1,0 +1,76 @@
+#!/bin/sh
+#
+#       /etc/rc.d/init.d/cydex_ts
+#
+#       Runs the Cydex Transfer Service.
+#       
+#
+# chkconfig:   - 85 15 
+#
+
+### BEGIN INIT INFO
+# Provides:          cydex
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: Start cydex transfer service at boot time.
+# Description:       Control cydex transfer service.
+### END INIT INFO
+
+# Source function library.
+. /etc/init.d/functions
+
+# Default values
+
+NAME=transfer_service
+CYDEX_HOME=/opt/cydex
+CYDEX_PATH=${CYDEX_HOME}/bin/$NAME
+SERVICENAME="Cydex Transfer Service"
+LOCKFILE=/var/lock/subsys/cydex_${NAME}
+RETVAL=0
+
+# Don't do anything if nothing is installed
+[ -x ${CYDEX_PATH} ] || exit 0
+
+start() {
+  echo -n "Starting ${SERVICENAME}: "
+  daemon "${CYDEX_PATH}" "> /dev/null 2>&1 &"
+  RETVAL=$?
+  echo
+  [ $RETVAL = 0 ] && touch ${LOCKFILE}
+        
+  return $RETVAL
+}
+
+stop() {
+        echo -n "Shutting down ${SERVICENAME}: "
+        killproc ${NAME}
+        RETVAL=$?
+        echo
+        [ $RETVAL = 0 ] && rm -f ${LOCKFILE} 
+}
+
+case "$1" in
+    start)
+        status ${NAME} > /dev/null 2>&1 && exit 0
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    status)
+        status ${NAME}
+        ;;
+    restart)
+        stop
+        start
+        ;;
+    reload)
+        stop
+        start
+        ;;
+    *)
+        echo "Usage: ${NAME} {start|stop|status|restart}"
+        exit 1
+        ;;
+esac
+exit $RETVAL

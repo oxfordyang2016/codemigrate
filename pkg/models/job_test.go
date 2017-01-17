@@ -13,10 +13,14 @@ import (
 var (
 	// TEST_DB = ":memory:"
 	TEST_DB  = "/tmp/job.sqlite3"
-	SHOW_SQL = false
+	SHOW_SQL = true
 )
 
 func init() {
+	resetDB()
+}
+
+func resetDB() {
 	if TEST_DB != ":memory:" {
 		os.Remove(TEST_DB)
 	}
@@ -26,8 +30,8 @@ func init() {
 
 func Test_Job(t *testing.T) {
 	Convey("Test Job", t, func() {
-		Convey("Test create", func() {
-			_, err := CreateJob("123", "1", "2", cydex.UPLOAD)
+		Convey("create", func() {
+			_, err := CreateJob("123", "u1", "p1", cydex.UPLOAD)
 			So(err, ShouldBeNil)
 			// So(j.State, ShouldEqual, cydex.TRANSFER_STATE_IDLE)
 		})
@@ -120,5 +124,121 @@ func Test_DeleteJob(t *testing.T) {
 
 		jds, _ = GetJobDetails("aaa")
 		So(jds, ShouldHaveLength, 0)
+	})
+}
+
+func Test_JobSearch(t *testing.T) {
+	resetDB()
+
+	times := []string{
+		"2016-12-17 17:12:30",
+		"2016-04-17 19:03:59",
+		"2017-01-05 22:43:12",
+	}
+	pkgs := []*Pkg{
+		&Pkg{Pid: "p1", Title: "test", Size: 876543, NumFiles: 5},
+		&Pkg{Pid: "p2", Title: "中文测试", Size: 1401357914234, NumFiles: 18},
+		&Pkg{Pid: "p3", Title: "333", Size: 1368364, NumFiles: 99},
+	}
+	jobs := []*Job{
+		&Job{JobId: "job1", Uid: "u1", Pid: "p1", Type: cydex.UPLOAD},
+		&Job{JobId: "job2", Uid: "u1", Pid: "p2", Type: cydex.UPLOAD},
+		&Job{JobId: "job3", Uid: "u2", Pid: "p3", Type: cydex.UPLOAD},
+	}
+	for i, pkg := range pkgs {
+		CreatePkg(pkg)
+		// 更新create_at, xorm默认使用当前时间插入
+		sql := "update package_pkg set create_at=? where id=?"
+		DB().Exec(sql, times[i], pkg.Id)
+	}
+	for i, job := range jobs {
+		DB().Insert(job)
+		sql := "update package_job set create_at=? where id=?"
+		DB().Exec(sql, times[i], job.Id)
+	}
+
+	Convey("job search", t, func() {
+		Convey("filter title", func() {
+			filter := JobFilter{
+				Title: "文",
+			}
+			jobs, err := GetJobsEx(cydex.UPLOAD, nil, &filter)
+			So(err, ShouldBeNil)
+			So(jobs, ShouldHaveLength, 1)
+			So(jobs[0].Pid, ShouldEqual, "p2")
+		})
+		Convey("filter sort by create_at", func() {
+			{
+				filter := JobFilter{
+					OrderBy: "create",
+				}
+				jobs, err := GetJobsEx(cydex.UPLOAD, nil, &filter)
+				So(err, ShouldBeNil)
+				So(jobs, ShouldHaveLength, 3)
+				So(jobs[0].Pid, ShouldEqual, "p2")
+				So(jobs[2].Pid, ShouldEqual, "p3")
+			}
+
+			{
+				filter := JobFilter{
+					OrderBy: "-create",
+				}
+				jobs, err := GetJobsEx(cydex.UPLOAD, nil, &filter)
+				So(err, ShouldBeNil)
+				So(jobs, ShouldHaveLength, 3)
+				So(jobs[0].Pid, ShouldEqual, "p3")
+				So(jobs[2].Pid, ShouldEqual, "p2")
+			}
+		})
+		Convey("filter sort by size", func() {
+			{
+				filter := JobFilter{
+					OrderBy: "size",
+				}
+				jobs, err := GetJobsEx(cydex.UPLOAD, nil, &filter)
+				So(err, ShouldBeNil)
+				So(jobs, ShouldHaveLength, 3)
+				So(jobs[0].Pid, ShouldEqual, "p1")
+				So(jobs[2].Pid, ShouldEqual, "p2")
+			}
+
+			{
+				filter := JobFilter{
+					OrderBy: "-size",
+				}
+				jobs, err := GetJobsEx(cydex.UPLOAD, nil, &filter)
+				So(err, ShouldBeNil)
+				So(jobs, ShouldHaveLength, 3)
+				So(jobs[0].Pid, ShouldEqual, "p2")
+				So(jobs[2].Pid, ShouldEqual, "p1")
+			}
+		})
+		Convey("filter by owner", func() {
+			filter := JobFilter{
+				Owner: "u1",
+			}
+			jobs, err := GetJobsEx(cydex.UPLOAD, nil, &filter)
+			So(err, ShouldBeNil)
+			So(jobs, ShouldHaveLength, 2)
+			So(jobs[0].Pid, ShouldEqual, "p1")
+			So(jobs[1].Pid, ShouldEqual, "p2")
+		})
+		Convey("filter by datetime", func() {
+			filter := JobFilter{
+				BegTime: time.Date(2016, time.June, 12, 0, 0, 0, 0, time.UTC),
+				EndTime: time.Date(2016, time.December, 30, 23, 59, 59, 0, time.UTC),
+			}
+			jobs, err := GetJobsEx(cydex.UPLOAD, nil, &filter)
+			So(err, ShouldBeNil)
+			So(jobs, ShouldHaveLength, 1)
+			So(jobs[0].Pid, ShouldEqual, "p1")
+		})
+		Convey("no filter", func() {
+			jobs, err := GetJobsEx(cydex.UPLOAD, nil, nil)
+			So(err, ShouldBeNil)
+			So(jobs, ShouldHaveLength, 3)
+			So(jobs[0].Pid, ShouldEqual, "p3")
+			So(jobs[2].Pid, ShouldEqual, "p2")
+		})
 	})
 }
