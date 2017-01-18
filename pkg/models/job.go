@@ -218,7 +218,19 @@ func DB() *xorm.Engine {
 		p.TotalNum = n
 	}
 
+ if p != nil {
+    	fmt.Println(`
 
+
+               p!===============nil
+
+
+
+    		`)
+//`		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
+    	sess = sess.Limit(1,1)
+
+	} 
 	//this is quering jobs.
 	if err := sess.Find(&jobs); err != nil {
    fmt.Println(`
@@ -235,20 +247,8 @@ func DB() *xorm.Engine {
 	}
      
 
-    if p != nil {
-    	fmt.Println(`
-
-
-               p!===============nil
-
-
-
-    		`)
-//`		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
-    	sess = sess.Limit(1,1)
-
-	}  
-
+    
+    
 	return jobs, nil
 }
 
