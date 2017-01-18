@@ -156,6 +156,8 @@ func DB() *xorm.Engine {
                   VVV    
     	`)
 	
+    sess = sess.Where("package_pkg.title like ?", fmt.Sprintf("'%%%s%%'", filter.Title))
+
 	/*
 	if filter != nil {
       fmt.Println(`
