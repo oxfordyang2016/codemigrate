@@ -249,10 +249,11 @@ func DB() *xorm.Engine {
 
 	} 
 	//this is quering jobs.
-	if err := sess.Find(&jobs); err != nil {
+/*	if err := sess.Find(&jobs); err != nil {
   
 		return nil, err
 	} 
+*/
 	return jobs, nil
 }
 
