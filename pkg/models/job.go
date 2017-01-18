@@ -227,8 +227,8 @@ func DB() *xorm.Engine {
 
 
     		`)
-//`		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
-    	sess = sess.Limit(3,3)//count ,offset
+        sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
+    	//sess = sess.Limit(3,3)//count ,offset
 
 	} 
 	//this is quering jobs.
