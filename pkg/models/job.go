@@ -171,6 +171,7 @@ func DB() *xorm.Engine {
 
 		//this is sql 
 		sess = sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid")
+		/*
 		if filter.Title != "" {
 			// sess = sess.Where("package_pkg.title like ?", fmt.Sprintf("'%%%s%%'", filter.Title))
 			// FIXME 这里应该使用占位符更安全
@@ -210,6 +211,10 @@ func DB() *xorm.Engine {
 		}
 	}
 
+
+
+*/
+
 	if !has_orderby {
 		sess = sess.Desc("package_job.create_at")
 	}
@@ -227,28 +232,15 @@ func DB() *xorm.Engine {
 
 
     		`)
-        sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
+        sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)// it works
     	//sess = sess.Limit(3,3)//count ,offset
 
 	} 
 	//this is quering jobs.
 	if err := sess.Find(&jobs); err != nil {
-   fmt.Println(`
-
-
-          if err := sess.Find(&jobs); err != nil {
-
-
-
-    		`)
-
-
+  
 		return nil, err
-	}
-     
-
-    
-    
+	} 
 	return jobs, nil
 }
 
