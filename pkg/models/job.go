@@ -163,9 +163,9 @@ func DB() *xorm.Engine {
 
 
 		`,filter.Title)
-    sess,err = sess.Where("package_pkg.title like ?", fmt.Sprintf("'%%%s%%'", filter.Title))
+    //sess = sess.Where("package_pkg.title like ?", fmt.Sprintf("'%%%s%%'", filter.Title))
   //sess= sess.Where("package_pkg.title=?", fmt.Sprintf("'%%%s%%'", filter.Title))
-  //sess = sess.Exec("select * from package_pkg where package_pkg.title=123qa")
+  sess,_ = sess.Exec("select * from package_pkg where package_pkg.title=123qa")
 	/*
 	if filter != nil {
       fmt.Println(`
