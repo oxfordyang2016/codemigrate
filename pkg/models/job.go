@@ -156,6 +156,19 @@ func DB() *xorm.Engine {
                   VVV    
     	`)
 	if filter != nil {
+      fmt.Println(`
+
+
+             
+                                    filter != nil 
+
+
+      	`)
+
+
+
+
+
 		//this is sql 
 		sess = sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid")
 		if filter.Title != "" {
@@ -208,11 +221,29 @@ func DB() *xorm.Engine {
 
 	//this is quering jobs.
 	if err := sess.Find(&jobs); err != nil {
+   fmt.Println(`
+
+
+          if err := sess.Find(&jobs); err != nil {
+
+
+
+    		`)
+
+
 		return nil, err
 	}
      
 
     if p != nil {
+    	fmt.Println(`
+
+
+               p!===============nil
+
+
+
+    		`)
 //`		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
     	sess = sess.Limit(1,1)
 
