@@ -422,9 +422,16 @@ func (self *PkgsController) parseJobFilter() *pkg_model.JobFilter {
 
 
     	`)
+    /*
+      type JobFilter struct {
+	Owner   string
+	BegTime time.Time
+	EndTime time.Time
+	Title   string
+	OrderBy string // 排序字符串
+}
 
-
-
+        */
 	filter := new(pkg_model.JobFilter)
 	filter.Owner = self.GetString("o")
 	filter.Title = self.GetString("title")
@@ -451,12 +458,26 @@ func (self *PkgsController) parseJobFilter() *pkg_model.JobFilter {
 	return filter
 }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 func (self *PkgsController) getLitePkgs() {
 
     fmt.Println(`
-
-
-                uuuuuu
+             uuuuuu
                  vvv
                  vvv
          i am invoke  func (self *PkgsController) getLitePkgs() {
@@ -477,9 +498,6 @@ uid := self.GetString(":uid")//get uid
                  vvvv
                  vvvv
                   vvv
-
-
-
     	`)
 
 
@@ -488,6 +506,22 @@ uid := self.GetString(":uid")//get uid
 	query := self.GetString("query")//get query
 	rsp := new(cydex.QueryPkgLiteRsp)//new a response
 	page := new(cydex.Pagination)//new a page
+/*
+//http://192.168.0.9:8000/cydex/cydex/src/develop/api.go
+type QueryPkgLiteRsp struct {
+	BaseRsp
+	TotalNum int        `json:"total_num,omitempty"`
+	Pkgs     []*PkgLite `json:"light_pkg_list"`
+}
+
+
+type Pagination struct {
+	PageSize int
+	PageNum  int
+	TotalNum int64
+}
+*/
+
 	page.PageSize, _ = self.GetInt("page_size")
 	page.PageNum, _ = self.GetInt("page_num")
 
@@ -520,12 +554,14 @@ uid := self.GetString(":uid")//get uid
 
 
 
-
+// i will skip there
 	if !page.Verify() {
 		page = nil
 	}
 	filter := self.parseJobFilter()//get date owner or so
+
 //this is for giving response
+
 	defer func() {
 		if rsp.Pkgs == nil {
 			rsp.Pkgs = make([]*cydex.PkgLite, 0)
@@ -538,7 +574,6 @@ uid := self.GetString(":uid")//get uid
                     |||||
                      |||
                      VVV
-
         	`)
 		
 		self.ServeJSON()
@@ -548,7 +583,6 @@ uid := self.GetString(":uid")//get uid
                   return
                    End
                    VVV
-
                    VVV
 
 
@@ -563,7 +597,7 @@ uid := self.GetString(":uid")//get uid
 	switch query {
 	case "admin":
 		if self.UserLevel != cydex.USER_LEVEL_ADMIN {
-			fmt.Println(`you are query ====================================>admin`)
+			fmt.Println(`you are query==============>admin`)
 			rsp.Error = cydex.ErrNotAllowed
 			return
 		}//auth manage
@@ -599,12 +633,30 @@ uid := self.GetString(":uid")//get uid
 			rsp.Error = cydex.ErrInnerServer
 			return
 		}
-		for _, j := range jobs {
+		for _, j := range jobs {//this is get job package
 			if j.Pkg == nil {
 				j.GetPkg(false)
 			}
 			pkgs = append(pkgs, j.Pkg)
 		}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 	case "sender":
 		jobs, err := pkg_model.GetJobsByUid(uid, cydex.UPLOAD, page)
 		if err != nil {
@@ -631,6 +683,8 @@ uid := self.GetString(":uid")//get uid
 			}
 			pkgs = append(pkgs, j.Pkg)
 		}
+
+
 	default:
 		clog.Warnf("Invalid query:%s", query)
 		rsp.Error = cydex.ErrInvalidParam
@@ -641,6 +695,13 @@ uid := self.GetString(":uid")//get uid
 		rsp.Error = cydex.ErrInnerServer
 		return
 	}
+
+
+
+
+
+
+
 
 	for _, p := range pkgs {
 		pkg_lite := &cydex.PkgLite{
@@ -661,12 +722,21 @@ uid := self.GetString(":uid")//get uid
 		for _, j := range dj {
 			pkg_lite.Receiver = append(pkg_lite.Receiver, &cydex.UserLite{Uid: j.Uid})
 		}
-		rsp.Pkgs = append(rsp.Pkgs, pkg_lite)
+		rsp.Pkgs = append(rsp.Pkgs, pkg_lite)///give package info
 	}
 	if page != nil {
 		rsp.TotalNum = int(page.TotalNum)
 	}
 }
+
+
+
+
+
+
+
+
+
 
 func (self *PkgsController) Post() {
 	rsp := new(cydex.CreatePkgRsp)

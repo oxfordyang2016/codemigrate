@@ -95,6 +95,27 @@ func GetJobs(typ int, p *cydex.Pagination) ([]*Job, error) {
 }
 
 func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) {
+	/*
+type Job struct {
+	Id            int64     `xorm:"pk autoincr"`
+	JobId         string    `xorm:"unique not null"`
+	Type          int       `xorm:"int"` // cydex.UPLOAD or cydex.DOWNLOAD
+	Pid           string    `xorm:"varchar(22) not null"`
+	Pkg           *Pkg      `xorm:"-"`
+	Uid           string    `xorm:"varchar(12) not null"`
+	CreateAt      time.Time `xorm:"DateTime created"`
+	UpdateAt      time.Time `xorm:"DateTime updated"`
+	SoftDel       int       `xorm:"BOOL not null default(0)"`
+	FinishedTimes int       `xorm:"not null default(0)"`
+	State         int       `xorm:"Int not null default(0)"` //FIXME: 目前和jd状态不同步，只用于判断是否是第一次下载
+
+	// runtime usage
+	Details              map[string]*JobDetail `xorm:"-"`
+	NumUnfinishedDetails int64                 `xorm:"-"`
+	IsCached             bool                  `xorm:"-"`
+}
+
+*/
 	fmt.Println(`
                        |
                        |
@@ -102,7 +123,8 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 
 		---i have enter func GetJobsEx(typ int,
 
-	            p *cydex.Pagination, filter *JobFilter)
+	    p *cydex.Pagination, filter *JobFilter)
+	  
 	             ([]*Job, error) { 
                        |
                        |
@@ -113,10 +135,15 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 	jobs := make([]*Job, 0)
 
 	has_orderby := false
+/*
+func DB() *xorm.Engine {
+	return db.Engine
+}
+
+*/
 	sess := DB().NewSession()//this is db initiation
 	sess = sess.Where("package_job.type=? and package_job.soft_del=0", typ)
     fmt.Println(`
-
     	         ||||
               UUUUUUUUUUUUU
                yyyyyyyyy
@@ -129,6 +156,7 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
                   VVV    
     	`)
 	if filter != nil {
+		//this is sql 
 		sess = sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid")
 		if filter.Title != "" {
 			// sess = sess.Where("package_pkg.title like ?", fmt.Sprintf("'%%%s%%'", filter.Title))
@@ -176,16 +204,19 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 		n, _ := sess.Count(new(Job))
 		p.TotalNum = n
 	}
+
+
+	//this is quering jobs.
 	if err := sess.Find(&jobs); err != nil {
 		return nil, err
 	}
      
 
     if p != nil {
-		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
+//`		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
+    	sess = sess.Limit(1,1)
+
 	}  
-
-
 
 	return jobs, nil
 }
