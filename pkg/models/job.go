@@ -155,6 +155,8 @@ func DB() *xorm.Engine {
                   ||
                   VVV    
     	`)
+	
+	/*
 	if filter != nil {
       fmt.Println(`
 
@@ -171,7 +173,7 @@ func DB() *xorm.Engine {
 
 		//this is sql 
 		sess = sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid")
-		/*
+		
 		if filter.Title != "" {
 			// sess = sess.Where("package_pkg.title like ?", fmt.Sprintf("'%%%s%%'", filter.Title))
 			// FIXME 这里应该使用占位符更安全
