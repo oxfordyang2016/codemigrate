@@ -150,9 +150,7 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 			sess = sess.Where("package_job.uid = ?", filter.Owner)
 		}
 
-        if p != nil {
-		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
-	}
+   
 
 
 		if filter.OrderBy != "" {
@@ -181,6 +179,14 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 	if err := sess.Find(&jobs); err != nil {
 		return nil, err
 	}
+     
+
+    if p != nil {
+		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)
+	}  
+
+
+
 	return jobs, nil
 }
 
