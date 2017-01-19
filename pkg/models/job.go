@@ -117,6 +117,7 @@ type User struct {
     Name string
     Salt string
     Age int
+    Age1 int
     Passwd string `xorm:"varchar(200)"`
     Created time.Time `xorm:"created"`
     Updated time.Time `xorm:"updated"`
