@@ -217,7 +217,7 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 			order_by := fmt.Sprintf("package_pkg.%s %s", order_item, order)
 			sess = sess.OrderBy(order_by)
 		}
-	}
+	
 	
 	if !has_orderby {
 		sess = sess.Desc("package_job.create_at")
