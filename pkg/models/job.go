@@ -112,7 +112,7 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 	jobs := make([]*Job, 0)
 	has_orderby := false
 	sess := DB().NewSession()
-	//sess = sess.Where("package_job.type=? and package_job.soft_del=0", typ)
+	sess = sess.Where("package_job.type=? and package_job.soft_del=0", typ)
 	//sess = sess.Where("package_job.pid=0ee87dc9d782_U_0ee87dc9d7821474616718")
 /*
 	if filter != nil {
