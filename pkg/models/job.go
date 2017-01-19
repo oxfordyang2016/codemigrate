@@ -234,7 +234,7 @@ if filter.Title != "" {
     return jobs, nil
     }
 
-
+/*
 
     	if p != nil {
 		n, _ := sess.Count(new(Job))
@@ -253,6 +253,21 @@ if filter.Title != "" {
 	}
 	*/
 	
+
+	if !has_orderby {
+		sess = sess.Desc("package_job.create_at")
+	}
+	if p != nil {
+		n, _ := sess.Count(new(Job))
+		p.TotalNum = n
+		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)// it works
+	}
+	if err := sess.Find(&jobs); err != nil {
+		return nil, err
+	}
+	return jobs, nil
+
+
 }
 
 
