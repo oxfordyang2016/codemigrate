@@ -112,9 +112,10 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 var engine *xorm.Engine
 var errtest error
 engine, errtest = xorm.NewEngine("mysql", "root:503951@/yangming?charset=utf8")
+err1 := engine.Sync(new(User))
 fmt.Println(errtest,err1)
 
-err1 := engine.Sync(new(User))
+
 
 
 
