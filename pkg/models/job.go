@@ -115,6 +115,9 @@ engine, errtest = xorm.NewEngine("mysql", "root:503951@/yangming?charset=utf8")
 engine.CreateTables(new(User))
 err1 := engine.Sync(new(User))
 fmt.Println(errtest,err1)
+user := new(User)
+user.Name = "myname"
+affected, err := engine.Insert(user)
 
 
 
