@@ -127,6 +127,8 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 			//sess = sess.Where(fmt.Sprintf("package_pkg.title like '%%%s%%'", filter.Title))
 			sess = sess.Where(fmt.Sprintf("package_pkg.title=?", filter.Title))
 		}
+
+}
 /*
 		if !filter.BegTime.IsZero() || !filter.EndTime.IsZero() {
 			var beg time.Time
