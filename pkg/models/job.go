@@ -107,7 +107,8 @@ type User struct {
     Id   int64
     Name string  `xorm:"varchar(25) not null unique 'usr_name'"`
 }
-func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) {
+
+func GetJobsEx_origin(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	has_orderby := false
 	sess := DB().NewSession()
@@ -161,7 +162,7 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 	}
 	return jobs, nil
 }
-func GetJobsEx2(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) {
+func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	has_orderby := false
 	fmt.Println(has_orderby)
@@ -174,7 +175,7 @@ func GetJobsEx2(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error)
 
 		sess = sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid")
 		
-
+/*
 		if filter.Title != "" {
 			// sess = sess.Where("package_pkg.title like ?", fmt.Sprintf("'%%%s%%'", filter.Title))
 			// FIXME 这里应该使用占位符更安全
@@ -185,7 +186,7 @@ func GetJobsEx2(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error)
 		}
 
 }
-/*
+
 		if !filter.BegTime.IsZero() || !filter.EndTime.IsZero() {
 			var beg time.Time
 			end := time.Now()
@@ -227,7 +228,7 @@ func GetJobsEx2(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error)
 		p.TotalNum = n
 		 sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)// it works
 	}
-	if err := sess.Or("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
+	if err := sess.Where("package_pkg.title=?",filter.Title).Or("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
 		//if err := sess.Find(&jobs); err != nil {
 		return nil, err
 	}
