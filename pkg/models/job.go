@@ -181,6 +181,7 @@ if filter.Title != "" {
 			// FIXME 这里应该使用占位符更安全
 			sess = sess.Where(fmt.Sprintf("package_pkg.title like '%%%s%%'", filter.Title))
 		}
+		
 		if !filter.BegTime.IsZero() || !filter.EndTime.IsZero() {
 			var beg time.Time
 			end := time.Now()
@@ -222,7 +223,7 @@ if filter.Title != "" {
 		p.TotalNum = n
 		 sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)// it works
 	}
-	if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where("package_pkg.title=?",filter.Title).Or("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
+	if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Or("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
 		//if err := sess.Find(&jobs); err != nil {
 		return nil, err
 	}
