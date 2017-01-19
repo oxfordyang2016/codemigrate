@@ -175,18 +175,12 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 
 		sess = sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid")
 		
-
-		if filter.Title != "" {
+*/
+if filter.Title != "" {
 			// sess = sess.Where("package_pkg.title like ?", fmt.Sprintf("'%%%s%%'", filter.Title))
 			// FIXME 这里应该使用占位符更安全
-			//sess = sess.Where(fmt.Sprintf("package_pkg.title like '%%%s%%'", filter.Title))
-			//sess = sess.Where(fmt.Sprintf("package_pkg.title=?", filter.Title))
-			//sess = sess.Where("package_pkg.title=?", filter.Title)
-			sess=sess.Where("package_pkg.title=?",filter.Title)
+			sess = sess.Where(fmt.Sprintf("package_pkg.title like '%%%s%%'", filter.Title))
 		}
-
-}
-*/
 		if !filter.BegTime.IsZero() || !filter.EndTime.IsZero() {
 			var beg time.Time
 			end := time.Now()
