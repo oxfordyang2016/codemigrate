@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"time"
 //THE BWLOW IS ADDED BY YANGMING
-	_ "github.com/go-sql-driver/mysql"
+	/*_ "github.com/go-sql-driver/mysql"
 	// "github.com/go-xorm/core"
 	"github.com/go-xorm/xorm"
 	_ "github.com/mattn/go-sqlite3"
 
-
+*/
 
 
 )
