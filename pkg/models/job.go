@@ -342,6 +342,7 @@ func DB() *xorm.Engine {
 	if p != nil {
 		n, _ := sess.Count(new(Job))
 		p.TotalNum = n
+		 sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)// it works
 	}
 
  if p != nil {
@@ -353,7 +354,7 @@ func DB() *xorm.Engine {
 
 
     		`)
-        sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)// it works
+       
     	//sess = sess.Limit(3,3)//count ,offset
 
 	} 
