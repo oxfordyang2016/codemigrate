@@ -277,7 +277,6 @@ func DB() *xorm.Engine {
     //sess = sess.Where("package_pkg.title like ?", fmt.Sprintf("'%%%s%%'", filter.Title))
   sess= sess.Where("package_pkg.title=123qa")
   //sess,_ = sess.Exec("select * from package_pkg where package_pkg.title=123qa")
-	/*
 	if filter != nil {
       fmt.Println(`
 
@@ -336,7 +335,6 @@ func DB() *xorm.Engine {
 
 
 
-*/
 
 	if !has_orderby {
 		sess = sess.Desc("package_job.create_at")
