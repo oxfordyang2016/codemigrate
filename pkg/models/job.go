@@ -110,6 +110,51 @@ type User struct {
 
 func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) {
 
+fmt.Println(`
+                      |
+                      |
+                      |
+                      |
+                      |
+                      |
+
+                      |
+                      |
+                      |
+                      |
+                      |
+                      |
+                                            |
+                      |
+                      |
+                      |
+                      |
+                      |
+                                            |
+                      |
+                      |
+                      |
+                      |
+                      |
+                                            |
+                      |
+                      |
+                      |
+                      |
+                      |
+                                            |
+                      |
+                      |
+                      |
+                      |
+                      |
+
+	`)
+
+
+
+
+
 engine,err1:= xorm.NewEngine("mysql", "root:503951@/cydex_user?charset=utf8")
 engine1,_:= xorm.NewEngine("mysql", "root:503951@/yangming?charset=utf8")
 fmt.Println(err1)
