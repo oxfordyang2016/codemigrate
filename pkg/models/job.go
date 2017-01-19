@@ -186,7 +186,7 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 		}
 
 }
-
+*/
 		if !filter.BegTime.IsZero() || !filter.EndTime.IsZero() {
 			var beg time.Time
 			end := time.Now()
@@ -198,7 +198,7 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 			}
 			sess = sess.Where("package_pkg.create_at >= ? and package_pkg.create_at <= ?", beg, end)
 		}
-*/
+
 		if filter.Owner != "" && typ == cydex.UPLOAD {
 			sess = sess.Where("package_job.uid = ?", filter.Owner)
 		}
