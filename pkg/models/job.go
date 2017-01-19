@@ -114,7 +114,8 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 	sess := DB().NewSession()
 	//sess = sess.Where("package_job.type=? and package_job.soft_del=0", typ)
 	//sess = sess.Where("package_job.pid=0ee87dc9d782_U_0ee87dc9d7821474616718")
-	/*if filter != nil {
+/*
+	if filter != nil {
 		
 
 		//sess = sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid")
@@ -164,7 +165,7 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 		p.TotalNum = n
 		 sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)// it works
 	}
-	if err := sess.Where("package_job.id=1").Find(&jobs); err != nil {
+	if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where("package_pkg.title=313").Find(&jobs); err != nil {
 		//if err := sess.Find(&jobs); err != nil {
 		return nil, err
 	}
