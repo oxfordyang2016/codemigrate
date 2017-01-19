@@ -202,7 +202,7 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 		if filter.Owner != "" && typ == cydex.UPLOAD {
 			sess = sess.Where("package_job.uid = ?", filter.Owner)
 		}
-
+*/
 		if filter.OrderBy != "" {
 			has_orderby = true
 			order := "ASC"
@@ -222,7 +222,6 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 	if !has_orderby {
 		sess = sess.Desc("package_job.create_at")
 	}
-	*/
 
 	if p != nil {
 		n, _ := sess.Count(new(Job))
