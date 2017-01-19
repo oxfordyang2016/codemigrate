@@ -111,7 +111,7 @@ type User struct {
 func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) {
 
 engine,err1:= xorm.NewEngine("mysql", "root:503951@/cydex_user?charset=utf8")
-engine1,_:= xorm.NewEngine("mysql", "root:503951@/cydex_user?charset=utf8")
+engine1,_:= xorm.NewEngine("mysql", "root:503951@/yangming?charset=utf8")
 fmt.Println(err1)
 type User struct {
     Id int64
@@ -135,11 +135,12 @@ type Usertest struct {
 }
 
 
+
 err := engine.Sync2(new(User))
 err2 := engine1.Sync2(new(Usertest))
 fmt.Println(err,err2)
-
-
+results, err := engine.Query("select * from user")
+fmt.Println(results)
 
 
 
