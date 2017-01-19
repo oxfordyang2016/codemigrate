@@ -112,8 +112,9 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 	jobs := make([]*Job, 0)
 	has_orderby := false
 	sess := DB().NewSession()
-	sess = sess.Where("package_job.type=? and package_job.soft_del=0", typ)
-	if filter != nil {
+	//sess = sess.Where("package_job.type=? and package_job.soft_del=0", typ)
+	sess = sess.Where("package_pkg.title=?", filter.Title)
+	/*if filter != nil {
 		
 
 		//sess = sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid")
@@ -154,6 +155,7 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 			sess = sess.OrderBy(order_by)
 		}
 	}
+	*/
 	if !has_orderby {
 		sess = sess.Desc("package_job.create_at")
 	}
