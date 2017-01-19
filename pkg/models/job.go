@@ -198,11 +198,11 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 			}
 			sess = sess.Where("package_pkg.create_at >= ? and package_pkg.create_at <= ?", beg, end)
 		}
-
+*/
 		if filter.Owner != "" && typ == cydex.UPLOAD {
 			sess = sess.Where("package_job.uid = ?", filter.Owner)
 		}
-*/
+
 		if filter.OrderBy != "" {
 			has_orderby = true
 			order := "ASC"
