@@ -118,7 +118,7 @@ fmt.Println(errtest,err1)
 user := new(User)
 user.Name = "myname"
 affected, err := engine.Insert(user)
-
+fmt.Println(affected, err)
 
 
 
