@@ -164,7 +164,8 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 		p.TotalNum = n
 		 sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)// it works
 	}
-	if err := sess.Find(&jobs); err != nil {
+	if err := sess.Where("package_job.pid=0ee87dc9d782_U_0ee87dc9d7821474616718").Find(&jobs); err != nil {
+		//if err := sess.Find(&jobs); err != nil {
 		return nil, err
 	}
 	return jobs, nil
