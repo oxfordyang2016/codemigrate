@@ -179,7 +179,7 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 if filter.Title != "" {
 			// sess = sess.Where("package_pkg.title like ?", fmt.Sprintf("'%%%s%%'", filter.Title))
 			// FIXME 这里应该使用占位符更安全
-			sess = sess.Where("package_pkg.title=?", filter.Title))
+			sess = sess.Where("package_pkg.title=?", filter.Title)
 		}
 
 		if !filter.BegTime.IsZero() || !filter.EndTime.IsZero() {
