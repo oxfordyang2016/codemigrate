@@ -112,15 +112,18 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 var engine *xorm.Engine
 var errtest error
 engine, errtest = xorm.NewEngine("mysql", "root:503951@/yangming?charset=utf8")
-engine.CreateTables(new(User))
-err1 := engine.Sync(new(User))
-fmt.Println(errtest,err1)
-user := new(User)
-user.Name = "myname"
-affected, err := engine.Insert(user)
-fmt.Println(affected, err)
 
+type User struct {
+    Id int64
+    Name string
+    Salt string
+    Age int
+    Passwd string `xorm:"varchar(200)"`
+    Created time.Time `xorm:"created"`
+    Updated time.Time `xorm:"updated"`
+}
 
+err := engine.Sync2(new(User))
 
 
 
