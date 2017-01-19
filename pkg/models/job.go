@@ -187,7 +187,7 @@ fmt.Println(err,err2)
 results, err := engine.Query("select * from user")
 fmt.Println(results)
 
-affected, err := engine.Exec("update user set age = ? where name = ?", 64, 'yangming')
+//affected, err := engine.Exec("update user set age = ? where name = ?", 64, 'yangming')
 
 
 
