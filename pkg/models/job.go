@@ -114,11 +114,11 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 	sess := DB().NewSession()
 	sess = sess.Where("package_job.type=? and package_job.soft_del=0", typ)
 	//sess = sess.Where("package_job.pid=0ee87dc9d782_U_0ee87dc9d7821474616718")
-/*
+
 	if filter != nil {
 		
 
-		//sess = sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid")
+		sess = sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid")
 		
 
 		if filter.Title != "" {
@@ -127,6 +127,7 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 			//sess = sess.Where(fmt.Sprintf("package_pkg.title like '%%%s%%'", filter.Title))
 			sess = sess.Where(fmt.Sprintf("package_pkg.title=?", filter.Title))
 		}
+/*
 		if !filter.BegTime.IsZero() || !filter.EndTime.IsZero() {
 			var beg time.Time
 			end := time.Now()
@@ -138,9 +139,11 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 			}
 			sess = sess.Where("package_pkg.create_at >= ? and package_pkg.create_at <= ?", beg, end)
 		}
+
 		if filter.Owner != "" && typ == cydex.UPLOAD {
 			sess = sess.Where("package_job.uid = ?", filter.Owner)
 		}
+
 		if filter.OrderBy != "" {
 			has_orderby = true
 			order := "ASC"
@@ -165,10 +168,15 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 		p.TotalNum = n
 		 sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)// it works
 	}
-	if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where("package_pkg.title=?",filter.Title).Or("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
+	if err := sess.Or("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
 		//if err := sess.Find(&jobs); err != nil {
 		return nil, err
 	}
+	/*if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where("package_pkg.title=?",filter.Title).Or("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
+		//if err := sess.Find(&jobs); err != nil {
+		return nil, err
+	}
+	*/
 	return jobs, nil
 }
 
