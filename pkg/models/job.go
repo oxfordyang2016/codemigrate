@@ -230,9 +230,7 @@ if filter.Title != "" {
 		return nil, err
 	}}
 
- if err := sess.Find(&jobs); err != nil {
-		return nil, err
-	}
+ 
 
 
 	/*if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where("package_pkg.title=?",filter.Title).Or("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
