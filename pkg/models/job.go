@@ -183,6 +183,8 @@ if filter.Title != "" {
 			sess = sess.Where(fmt.Sprintf("package_pkg.title like '%%%s%%'", filter.Title))
 		}
 */
+
+	if filter != nil{	
 		if !filter.BegTime.IsZero() || !filter.EndTime.IsZero() {
 			var beg time.Time
 			end := time.Now()
@@ -230,7 +232,7 @@ if filter.Title != "" {
 		return nil, err
 	}}
 
- 
+    }
 
 
 	/*if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where("package_pkg.title=?",filter.Title).Or("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
