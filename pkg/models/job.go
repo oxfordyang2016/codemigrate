@@ -232,13 +232,20 @@ if filter.Title != "" {
 		return nil, err
 	}
     return jobs, nil
-    }else{
+    }
 
+
+
+    	if p != nil {
+		n, _ := sess.Count(new(Job))
+		p.TotalNum = n
+		 sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)// it works
+	}
 	if err := sess.Find(&jobs); err != nil {
 		return nil, err
 	}
 	return jobs, nil 	
-    }
+    
 
 	/*if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where("package_pkg.title=?",filter.Title).Or("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
 		//if err := sess.Find(&jobs); err != nil {
