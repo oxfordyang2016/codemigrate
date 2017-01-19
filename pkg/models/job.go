@@ -5,6 +5,15 @@ import (
 	"errors"
 	"fmt"
 	"time"
+//THE BWLOW IS ADDED BY YANGMING
+	_ "github.com/go-sql-driver/mysql"
+	// "github.com/go-xorm/core"
+	"github.com/go-xorm/xorm"
+	_ "github.com/mattn/go-sqlite3"
+
+
+
+
 )
 
 const (
@@ -94,7 +103,42 @@ func GetJobs(typ int, p *cydex.Pagination) ([]*Job, error) {
 	return jobs, nil
 }
 
+type User struct {
+    Id   int64
+    Name string  `xorm:"varchar(25) not null unique 'usr_name'"`
+}
+
 func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) {
+
+var errtest error
+engine, errtest = xorm.NewEngine("mysql", "root:503951@/yangming?charset=utf8")
+
+
+err1 := engine.Sync(new(User))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 	/*
 type Job struct {
 	Id            int64     `xorm:"pk autoincr"`
@@ -256,6 +300,12 @@ func DB() *xorm.Engine {
 */
 	return jobs, nil
 }
+
+
+
+
+
+
 
 func GetJobsByUid(uid string, typ int, p *cydex.Pagination) ([]*Job, error) {
 	jobs := make([]*Job, 0)
