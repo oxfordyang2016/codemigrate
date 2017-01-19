@@ -108,7 +108,7 @@ type User struct {
     Name string  `xorm:"varchar(25) not null unique 'usr_name'"`
 }
 
-func GetJobsEx_origin(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) {
+func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	has_orderby := false
 	sess := DB().NewSession()
@@ -162,7 +162,7 @@ func GetJobsEx_origin(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, 
 	}
 	return jobs, nil
 }
-func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) {
+func GetJobsEx_ok(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	has_orderby := false
 	fmt.Println(has_orderby)
