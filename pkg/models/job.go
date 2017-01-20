@@ -185,6 +185,34 @@ if filter.Title != "" {
 */
 
 	if filter != nil{	
+fmt.Println(`
+
+            UUUUUUUUUUUUU
+            vvvvvvvvvvvv
+            vvvvvvvvvvvv
+            i am filter is not nil
+
+           bnbnnnnnnnnnnnnnn
+              ||||||
+                UUUUUUUUUUUUU
+            vvvvvvvvvvvv
+            vvvvvvvvvvvv
+            i am filter is not nil
+
+           bnbnnnnnnnnnnnnnn
+              ||||||
+                UUUUUUUUUUUUU
+            vvvvvvvvvvvv
+            vvvvvvvvvvvv
+            i am filter is not nil
+
+           bnbnnnnnnnnnnnnnn
+              ||||||
+
+
+
+	`)
+
 		if !filter.BegTime.IsZero() || !filter.EndTime.IsZero() {
 			var beg time.Time
 			end := time.Now()
