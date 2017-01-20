@@ -162,7 +162,7 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 	}
 	return jobs, nil
 }
-func GetJobsEx1(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) {
+func GetJobsEx22(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) {
 	jobs := make([]*Job, 0)
 	has_orderby := false
 	fmt.Println(has_orderby)
