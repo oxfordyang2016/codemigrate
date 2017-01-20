@@ -193,6 +193,14 @@ if !filter.BegTime.IsZero() ||  !filter.EndTime.IsZero() || filter.Owner != "" |
    
 
 		if !filter.BegTime.IsZero() || !filter.EndTime.IsZero() {
+
+			fmt.Println(`
+
+                 i have enter time zone ===========================================================>
+
+
+
+	`)
 			var beg time.Time
 			end := time.Now()
 			if !filter.BegTime.IsZero() {
@@ -203,12 +211,20 @@ if !filter.BegTime.IsZero() ||  !filter.EndTime.IsZero() || filter.Owner != "" |
 			}
 			sess = sess.Where("package_pkg.create_at >= ? and package_pkg.create_at <= ?", beg, end)
 		}
-/*
-		if filter.Owner != "" && typ == cydex.UPLOAD {
-			sess = sess.Where("package_job.uid = ?", filter.Owner)
-		}
-*/
+
 		if filter.OrderBy != "" {
+
+
+fmt.Println(`
+
+                 i have enter order===========================================================>
+
+
+
+	`)
+
+
+
 			has_orderby = true
 			order := "ASC"
 			order_item := filter.OrderBy
@@ -223,8 +239,18 @@ if !filter.BegTime.IsZero() ||  !filter.EndTime.IsZero() || filter.Owner != "" |
 			sess = sess.OrderBy(order_by)
 		}
 	
+
+
 	 if !has_orderby {
 		sess = sess.Desc("package_job.create_at")
+fmt.Println(`
+
+                 !has_orderby===========================================================>
+
+
+
+	`)
+
 	}
 	
 
