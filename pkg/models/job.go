@@ -185,38 +185,12 @@ if filter.Title != "" {
 */
 if !filter.BegTime.IsZero() ||  !filter.EndTime.IsZero() || filter.Owner != "" || filter.OrderBy !="" ||  filter.Title != ""{ 
 //	if filter != nil{	
-fmt.Println(`
-
-            UUUUUUUUUUUUU
-            vvvvvvvvvvvv
-            vvvvvvvvvvvv
-            i am filter is not nil
-
-           bnbnnnnnnnnnnnnnn
-              ||||||
-                UUUUUUUUUUUUU
-            vvvvvvvvvvvv
-            vvvvvvvvvvvv
-            i am filter is not nil
-
-           bnbnnnnnnnnnnnnnn
-              ||||||
-                UUUUUUUUUUUUU
-            vvvvvvvvvvvv
-            vvvvvvvvvvvv
-            i am filter is not nil
-
-           bnbnnnnnnnnnnnnnn
-              ||||||
-
-
-
-	`)
        	if p != nil {
 		n, _ := sess.Count(new(Job))
 		p.TotalNum = n
 		 sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)// it works
 	}
+   
 
 		if !filter.BegTime.IsZero() || !filter.EndTime.IsZero() {
 			var beg time.Time
@@ -249,10 +223,10 @@ fmt.Println(`
 			sess = sess.OrderBy(order_by)
 		}
 	
-	
-	if !has_orderby {
+	 if !has_orderby {
 		sess = sess.Desc("package_job.create_at")
 	}
+	
 
 
 	
