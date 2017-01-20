@@ -175,41 +175,14 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 		p.TotalNum = n
 		 sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)// it works
 	}
-   
-
-
-   	if !filter.BegTime.IsZero() || !filter.EndTime.IsZero() {
-			var beg time.Time
-			end := time.Now()
-			if !filter.BegTime.IsZero() {
-				beg = filter.BegTime
-			}
-			if !filter.EndTime.IsZero() {
-				end = filter.EndTime
-			}
-			sess = sess.Where("package_pkg.create_at >= ? and package_pkg.create_at <= ?", beg, end)
-		}   
+      
 
 	 if !has_orderby {
 		sess = sess.Desc("package_job.create_at")
 
 
 	}
-	if filter.OrderBy != "" {
-			has_orderby = true
-			order := "ASC"
-			order_item := filter.OrderBy
-			if filter.OrderBy[0] == '-' {
-				order = "DESC"
-				order_item = filter.OrderBy[1:]
-			}
-			if order_item == "create" {
-				order_item = "create_at"
-			}
-			order_by := fmt.Sprintf("package_pkg.%s %s", order_item, order)
-			sess = sess.OrderBy(order_by)
-		}
-	}
+	
 
 //if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where("package_pkg.title=?",filter.Title).Or("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
    if filter.Title != "" && (filter.Owner != ""&&typ == cydex.UPLOAD ){
