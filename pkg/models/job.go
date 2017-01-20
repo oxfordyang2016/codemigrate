@@ -189,7 +189,7 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 
 
 
-if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where("package_pkg.title=?",filter.Title).And("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
+if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where(fmt.Sprintf("package_pkg.title like '%%%s%%'", filter.Title)).And("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
 		//if err := sess.Find(&jobs); err != nil {
 		return nil, err
 	}
