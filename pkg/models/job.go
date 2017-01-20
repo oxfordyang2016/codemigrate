@@ -195,30 +195,30 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 
 if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where("package_pkg.title=?",filter.Title).And("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
 		//if err := sess.Find(&jobs); err != nil {
-		n, _ := sess.Count(new(Job))
-			fmt.Println(`count is all----------------------->`,n)
+		
 		return nil, err
 	}
 
-
+n, _ := sess.Count(new(Job))
+			fmt.Println(`count is all----------------------->`,n)
  return jobs, nil
    }
 
 	if filter.Title != "" || (filter.Owner != "" && typ == cydex.UPLOAD){
 	    if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where("package_pkg.title=?",filter.Title).Or("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
 		//if err := sess.Find(&jobs); err != nil {
-			n, _ := sess.Count(new(Job))
-			fmt.Println(`count is all----------------------->`,n)
+		
 		return nil, err
 	}
 
-
+	n, _ := sess.Count(new(Job))
+			fmt.Println(`count is all----------------------->`,n)
  return jobs, nil
 }
 
 
    
-    }
+    } 
 
 
 
