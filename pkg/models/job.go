@@ -243,7 +243,7 @@ if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid")
 	}
 
 
-
+ return jobs, nil
    }
 
 	if filter.Title != "" || (filter.Owner != "" && typ == cydex.UPLOAD){
@@ -260,11 +260,11 @@ if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid")
 
   	`)
 
-
+ return jobs, nil
 }
 
 
-    return jobs, nil
+   
     }
 
 /*
