@@ -168,25 +168,8 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 	fmt.Println(has_orderby)
 	sess := DB().NewSession()
 	sess = sess.Where("package_job.type=? and package_job.soft_del=0", typ)
-	//sess = sess.Where("package_job.pid=0ee87dc9d782_U_0ee87dc9d7821474616718")
-/*
-	if filter != nil {
-		
 
-		sess = sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid")
-		
-
-/*		
-if filter.Title != "" {
-			// sess = sess.Where("package_pkg.title like ?", fmt.Sprintf("'%%%s%%'", filter.Title))
-			// FIXME 这里应该使用占位符更安全
-			sess = sess.Where(fmt.Sprintf("package_pkg.title like '%%%s%%'", filter.Title))
-		}
-*/
-
-
-if !filter.BegTime.IsZero() ||  !filter.EndTime.IsZero() || filter.Owner != "" || filter.OrderBy !="" ||  filter.Title != ""{ 
-//	if filter != nil{	
+    if !filter.BegTime.IsZero() ||  !filter.EndTime.IsZero() || filter.Owner != "" || filter.OrderBy !="" ||  filter.Title != ""{ 	
        	if p != nil {
 		n, _ := sess.Count(new(Job))
 		p.TotalNum = n
@@ -194,12 +177,39 @@ if !filter.BegTime.IsZero() ||  !filter.EndTime.IsZero() || filter.Owner != "" |
 	}
    
 
+
+   	if !filter.BegTime.IsZero() || !filter.EndTime.IsZero() {
+			var beg time.Time
+			end := time.Now()
+			if !filter.BegTime.IsZero() {
+				beg = filter.BegTime
+			}
+			if !filter.EndTime.IsZero() {
+				end = filter.EndTime
+			}
+			sess = sess.Where("package_pkg.create_at >= ? and package_pkg.create_at <= ?", beg, end)
+		}   
+
 	 if !has_orderby {
 		sess = sess.Desc("package_job.create_at")
 
 
 	}
-	
+	if filter.OrderBy != "" {
+			has_orderby = true
+			order := "ASC"
+			order_item := filter.OrderBy
+			if filter.OrderBy[0] == '-' {
+				order = "DESC"
+				order_item = filter.OrderBy[1:]
+			}
+			if order_item == "create" {
+				order_item = "create_at"
+			}
+			order_by := fmt.Sprintf("package_pkg.%s %s", order_item, order)
+			sess = sess.OrderBy(order_by)
+		}
+	}
 
 //if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where("package_pkg.title=?",filter.Title).Or("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
    if filter.Title != "" && (filter.Owner != ""&&typ == cydex.UPLOAD ){
