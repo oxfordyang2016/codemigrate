@@ -183,46 +183,7 @@ if filter.Title != "" {
 			sess = sess.Where(fmt.Sprintf("package_pkg.title like '%%%s%%'", filter.Title))
 		}
 */
-func Adsort() {
 
-	if filter.OrderBy != "" {
-			has_orderby = true
-			order := "ASC"
-			order_item := filter.OrderBy
-			if filter.OrderBy[0] == '-' {
-				order = "DESC"
-				order_item = filter.OrderBy[1:]
-			}
-			if order_item == "create" {
-				order_item = "create_at"
-			}
-		//	return fmt.Sprintf("package_pkg.%s %s", order_item, order)
-	       order_by := fmt.Sprintf("package_pkg.%s %s", order_item, order)
-			sess = sess.OrderBy(order_by)
-		}
-
-
-
-}
-
-func Timesort() {
-	if !filter.BegTime.IsZero() || !filter.EndTime.IsZero() {
-			var beg time.Time
-			end := time.Now()
-			if !filter.BegTime.IsZero() {
-				beg = filter.BegTime
-			}
-			if !filter.EndTime.IsZero() {
-				end = filter.EndTime
-			}
-			sess = sess.Where("package_pkg.create_at >= ? and package_pkg.create_at <= ?", beg, end)
-
-		}
-	
-}
-
-Adsort()
-Timesort()
 
 if !filter.BegTime.IsZero() ||  !filter.EndTime.IsZero() || filter.Owner != "" || filter.OrderBy !="" ||  filter.Title != ""{ 
 //	if filter != nil{	
