@@ -183,7 +183,7 @@ if filter.Title != "" {
 			sess = sess.Where(fmt.Sprintf("package_pkg.title like '%%%s%%'", filter.Title))
 		}
 */
-func Adsort() string{
+func Adsort() {
 
 	if filter.OrderBy != "" {
 			has_orderby = true
@@ -196,15 +196,16 @@ func Adsort() string{
 			if order_item == "create" {
 				order_item = "create_at"
 			}
-			return fmt.Sprintf("package_pkg.%s %s", order_item, order)
-	
+		//	return fmt.Sprintf("package_pkg.%s %s", order_item, order)
+	       order_by := fmt.Sprintf("package_pkg.%s %s", order_item, order)
+			sess = sess.OrderBy(order_by)
 		}
 
 
 
 }
 
-func Timesort() string{
+func Timesort() {
 	if !filter.BegTime.IsZero() || !filter.EndTime.IsZero() {
 			var beg time.Time
 			end := time.Now()
@@ -215,10 +216,13 @@ func Timesort() string{
 				end = filter.EndTime
 			}
 			sess = sess.Where("package_pkg.create_at >= ? and package_pkg.create_at <= ?", beg, end)
-			
+
 		}
 	
 }
+
+Adsort()
+Timesort()
 
 if !filter.BegTime.IsZero() ||  !filter.EndTime.IsZero() || filter.Owner != "" || filter.OrderBy !="" ||  filter.Title != ""{ 
 //	if filter != nil{	
@@ -229,64 +233,9 @@ if !filter.BegTime.IsZero() ||  !filter.EndTime.IsZero() || filter.Owner != "" |
 	}
    
 
-		if !filter.BegTime.IsZero() || !filter.EndTime.IsZero() {
-
-			fmt.Println(`
-
-                 i have enter time zone ===========================================================>
-
-
-
-	`)
-			var beg time.Time
-			end := time.Now()
-			if !filter.BegTime.IsZero() {
-				beg = filter.BegTime
-			}
-			if !filter.EndTime.IsZero() {
-				end = filter.EndTime
-			}
-			sess = sess.Where("package_pkg.create_at >= ? and package_pkg.create_at <= ?", beg, end)
-		}
-
-		if filter.OrderBy != "" {
-
-
-fmt.Println(`
-
-                 i have enter order===========================================================>
-
-
-
-	`)
-
-
-
-			has_orderby = true
-			order := "ASC"
-			order_item := filter.OrderBy
-			if filter.OrderBy[0] == '-' {
-				order = "DESC"
-				order_item = filter.OrderBy[1:]
-			}
-			if order_item == "create" {
-				order_item = "create_at"
-			}
-			order_by := fmt.Sprintf("package_pkg.%s %s", order_item, order)
-			sess = sess.OrderBy(order_by)
-		}
-	
-
-
 	 if !has_orderby {
 		sess = sess.Desc("package_job.create_at")
-fmt.Println(`
 
-                 !has_orderby===========================================================>
-
-
-
-	`)
 
 	}
 	
@@ -323,13 +272,6 @@ if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid")
 
 	if !has_orderby {
 		sess = sess.Desc("package_job.create_at")
-fmt.Println(`
-
-                 !has_orderby===========================================================>
-
-
-
-	`)
 
 	}
 
