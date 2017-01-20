@@ -253,11 +253,11 @@ if filter.Title != "" {
 	}
 	*/
 	
-/*
+
 	if !has_orderby {
 		sess = sess.Desc("package_job.create_at")
 	}
-*/
+
 	if p != nil {
 		n, _ := sess.Count(new(Job))
 		p.TotalNum = n
