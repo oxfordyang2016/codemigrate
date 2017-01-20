@@ -183,8 +183,9 @@ if filter.Title != "" {
 			sess = sess.Where(fmt.Sprintf("package_pkg.title like '%%%s%%'", filter.Title))
 		}
 */
-
-	if filter != nil{	
+if !filter.BegTime.IsZero() || !filter.EndTime.IsZero() ||filter.Owner != "" ||filter.OrderBy != "||"filter.Title != "" 
+//	if filter != nil{	
+{
 fmt.Println(`
 
             UUUUUUUUUUUUU
