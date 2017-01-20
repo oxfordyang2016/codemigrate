@@ -230,10 +230,19 @@ if !filter.BegTime.IsZero() ||  !filter.EndTime.IsZero() || filter.Owner != "" |
 
 //if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where("package_pkg.title=?",filter.Title).Or("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
    if filter.Title != "" && (filter.Owner != ""&&typ == cydex.UPLOAD ){
+fmt.Println(`
+
+                  &&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&&
+
+	`)
+
+
 if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where("package_pkg.title=?",filter.Title).And("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
 		//if err := sess.Find(&jobs); err != nil {
 		return nil, err
 	}
+
+
 
    }
 
@@ -242,6 +251,15 @@ if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid")
 		//if err := sess.Find(&jobs); err != nil {
 		return nil, err
 	}
+  fmt.Println(`
+
+
+
+                  ||||||||||||||||||||||||||||||||||||||||||||||
+
+
+  	`)
+
 
 }
 
