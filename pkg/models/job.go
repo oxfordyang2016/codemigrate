@@ -322,7 +322,7 @@ fmt.Println(`
 
 
 	`)
-		
+
 	}
 
 	if p != nil {
@@ -330,7 +330,7 @@ fmt.Println(`
 		p.TotalNum = n
 		sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)// it works
 	}
-	if err := sess.Find(&jobs); err != nil {
+	if err := sess.Desc("package_job.create_at").Find(&jobs); err != nil {
 		return nil, err
 	}
 	return jobs, nil
