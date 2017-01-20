@@ -175,7 +175,11 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 		p.TotalNum = n
 		 sess = sess.Limit(p.PageSize, (p.PageNum-1)*p.PageSize)// it works
 	}
-      
+   
+
+	
+
+
 
 	 if !has_orderby {
 		sess = sess.Desc("package_job.create_at")
@@ -189,7 +193,7 @@ func GetJobsEx(typ int, p *cydex.Pagination, filter *JobFilter) ([]*Job, error) 
 
 
 
-if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where(fmt.Sprintf("package_pkg.title like '%%%s%%'", filter.Title)).And("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
+if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where("package_pkg.title=?",filter.Title).And("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
 		//if err := sess.Find(&jobs); err != nil {
 		return nil, err
 	}
@@ -199,7 +203,7 @@ if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid")
    }
 
 	if filter.Title != "" || (filter.Owner != "" && typ == cydex.UPLOAD){
-	    if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where(fmt.Sprintf("package_pkg.title like '%%%s%%'", filter.Title)).Or("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
+	    if err := sess.Join("INNER", "package_pkg", "package_pkg.pid = package_job.pid").Where("package_pkg.title=?",filter.Title).Or("package_job.uid = ?", filter.Owner).Find(&jobs); err != nil {
 		//if err := sess.Find(&jobs); err != nil {
 		return nil, err
 	}
